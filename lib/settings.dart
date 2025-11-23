@@ -13,6 +13,7 @@ class SettingsDialog extends StatefulWidget {
 class _SettingsDialogState extends State<SettingsDialog> {
   List<String> _holidayCountries = [];
   List<String> _religiousCalendars = [];
+  String _tileCalendarDisplay = 'none'; // none, chinese, islamic
 
   final Map<String, String> _countryMap = {
     "US": "United States",
@@ -64,11 +65,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
   };
 
   final Map<String, String> _religiousCalendarMap = {
-    'islamic': 'Islamic Calendar (Ramadan, Eid, etc.)',
-    'chinese': 'Chinese Lunar Calendar (农历)',
-    'jewish': 'Jewish Calendar',
-    'hindu': 'Hindu Calendar',
-    'christian': 'Christian Calendar',
+    'chinese': '🏮 Chinese Lunar Calendar (农历)',
+    'islamic': '☪️ Islamic Calendar (Hijri)',
+    'jewish': '✡️ Jewish Calendar',
+    'hindu': '🕉️ Hindu Calendar',
+    'christian': '✝️ Christian Calendar',
   };
 
   @override
@@ -89,12 +90,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
           _holidayCountries = [];
         }
         
-        // Load religious calendars
+        // Load religious calendars (for public holiday API)
         final religious = data?['religiousCalendars'];
         if (religious != null && religious is List) {
           _religiousCalendars = List<String>.from(religious);
         } else {
           _religiousCalendars = [];
+        }
+        
+        // Load tile calendar display preference
+        final tileDisplay = data?['tileCalendarDisplay'];
+        if (tileDisplay != null && tileDisplay is String) {
+          _tileCalendarDisplay = tileDisplay;
+        } else {
+          _tileCalendarDisplay = 'none';
         }
       });
     }
@@ -104,6 +113,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     await FirebaseFirestore.instance.collection('users').doc(widget.currentUserId).update({
       'additionalHolidayCountry': _holidayCountries.isNotEmpty ? _holidayCountries[0] : null,
       'religiousCalendars': _religiousCalendars,
+      'tileCalendarDisplay': _tileCalendarDisplay,
     });
     
     if (mounted) {
@@ -234,10 +244,38 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
                 const SizedBox(height: 20),
                 
-                // Religious Calendars
-                const Text("Religious Calendars (Optional)", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                // Calendar Tile Display Setting
+                const Text("Calendar Tile Display", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 5),
-                const Text("Select religious calendars to include holidays like Ramadan, Chinese New Year, etc."),
+                const Text("Choose which calendar system to show on calendar tiles:"),
+                const SizedBox(height: 10),
+                
+                DropdownButtonFormField<String>(
+                  value: _tileCalendarDisplay,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: "Tile Calendar Display",
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'none', child: Text('None - Gregorian only')),
+                    DropdownMenuItem(value: 'chinese', child: Text('🏮 Chinese Lunar (农历)')),
+                    DropdownMenuItem(value: 'islamic', child: Text('☪️ Islamic Hijri')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        _tileCalendarDisplay = value;
+                      });
+                    }
+                  },
+                ),
+
+                const SizedBox(height: 20),
+                
+                // Religious Calendars for Public Holidays
+                const Text("Religious Public Holidays (API)", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 5),
+                const Text("Select religious calendars to fetch public holidays (Ramadan, Eid, Chinese New Year, etc.):"),
                 const SizedBox(height: 10),
                 
                 // Religious calendar checkboxes

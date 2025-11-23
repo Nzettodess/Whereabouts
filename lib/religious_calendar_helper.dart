@@ -1,18 +1,15 @@
-// import 'package:hijri/hijri.dart'; // Temporarily disabled due to package issues
+import 'package:hijri/hijri_calendar.dart';
 import 'package:lunar/lunar.dart';
 
 class ReligiousCalendarHelper {
   // Convert Gregorian date to Hijri (Islamic) date
-  // Temporarily disabled - hijri package has file issues
   static String getHijriDate(DateTime gregorianDate) {
-    // TODO: Re-enable when hijri package is fixed
-    // try {
-    //   final hijri = HijriCalendar.fromDate(gregorianDate);
-    //   return '${hijri.hDay} ${_getHijriMonthName(hijri.hMonth)} ${hijri.hYear} AH';
-    // } catch (e) {
-    //   return '';
-    // }
-    return ''; // Placeholder
+    try {
+      final hijri = HijriCalendar.fromDate(gregorianDate);
+      return '${hijri.hDay}/${hijri.hMonth}';
+    } catch (e) {
+      return '';
+    }
   }
 
   static String _getHijriMonthName(int month) {
@@ -28,7 +25,7 @@ class ReligiousCalendarHelper {
   static String getChineseLunarDate(DateTime gregorianDate) {
     try {
       final lunar = Lunar.fromDate(gregorianDate);
-      return '农历 ${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}';
+      return '🏮 ${lunar.getMonthInChinese()}${lunar.getDayInChinese()}';
     } catch (e) {
       return '';
     }
@@ -38,14 +35,14 @@ class ReligiousCalendarHelper {
   static List<String> getReligiousDates(DateTime date, List<String> enabledCalendars) {
     final dates = <String>[];
     
+    if (enabledCalendars.contains('chinese')) {
+      final lunar = getChineseLunarDate(date);
+      if (lunar.isNotEmpty) dates.add(lunar);
+    }
+    
     if (enabledCalendars.contains('islamic')) {
       final hijri = getHijriDate(date);
       if (hijri.isNotEmpty) dates.add('☪️ $hijri');
-    }
-    
-    if (enabledCalendars.contains('chinese')) {
-      final lunar = getChineseLunarDate(date);
-      if (lunar.isNotEmpty) dates.add('🏮 $lunar');
     }
     
     // Add more calendars as needed

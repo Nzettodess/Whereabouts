@@ -39,7 +39,8 @@ class _ProfileDialogState extends State<ProfileDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
+      child: Container(
+        width: 400,
         padding: const EdgeInsets.all(20.0),
         child: StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance.collection('users').doc(widget.user.uid).snapshots(),

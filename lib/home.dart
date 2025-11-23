@@ -511,6 +511,16 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
                               _calendarController.backward!();
                             },
                           ),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              _calendarController.displayDate = DateTime.now();
+                            },
+                            icon: const Icon(Icons.today, size: 16),
+                            label: const Text('Today'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                          ),
                           IconButton(
                             icon: const Icon(Icons.chevron_right),
                             onPressed: () {
