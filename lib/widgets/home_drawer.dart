@@ -64,7 +64,7 @@ class HomeDrawer extends StatelessWidget {
           ),
           ListTile(
             leading: const Icon(Icons.group),
-            title: const Text("Manage Groups"),
+            title: const Text("Groups"),
             onTap: () {
               Navigator.pop(context);
               onManageGroupsTap();

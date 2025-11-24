@@ -7,11 +7,13 @@ import 'firestore_service.dart';
 class AddEventModal extends StatefulWidget {
   final String currentUserId;
   final DateTime initialDate;
+  final GroupEvent? eventToEdit;
 
   const AddEventModal({
     super.key,
     required this.currentUserId,
     required this.initialDate,
+    this.eventToEdit,
   });
 
   @override
@@ -25,13 +27,27 @@ class _AddEventModalState extends State<AddEventModal> {
   final TextEditingController _descController = TextEditingController();
   
   DateTime _selectedDate = DateTime.now();
+  TimeOfDay _selectedTime = TimeOfDay.now();
+  bool _hasTime = false;
   String? _selectedGroupId;
   List<Group> _userGroups = [];
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = widget.initialDate;
+    if (widget.eventToEdit != null) {
+      // Editing mode
+      final event = widget.eventToEdit!;
+      _titleController.text = event.title;
+      _descController.text = event.description;
+      _selectedDate = event.date;
+      _selectedTime = TimeOfDay.fromDateTime(event.date);
+      _hasTime = event.hasTime;
+      _selectedGroupId = event.groupId;
+    } else {
+      // Create mode
+      _selectedDate = widget.initialDate;
+    }
     _loadUserGroups();
   }
 
@@ -40,7 +56,7 @@ class _AddEventModalState extends State<AddEventModal> {
       if (mounted) {
         setState(() {
           _userGroups = groups;
-          if (groups.isNotEmpty) {
+          if (widget.eventToEdit == null && groups.isNotEmpty && _selectedGroupId == null) {
             _selectedGroupId = groups.first.id;
           }
         });
@@ -50,17 +66,46 @@ class _AddEventModalState extends State<AddEventModal> {
 
   void _saveEvent() async {
     if (_formKey.currentState!.validate() && _selectedGroupId != null) {
-      final event = GroupEvent(
-        id: const Uuid().v4(),
-        groupId: _selectedGroupId!,
-        creatorId: widget.currentUserId,
-        title: _titleController.text,
-        description: _descController.text,
-        date: _selectedDate,
-        rsvps: {widget.currentUserId: 'Yes'}, // Creator automatically RSVPs Yes
-      );
+      // Combine date and time if hasTime is true
+      DateTime finalDate = _selectedDate;
+      if (_hasTime) {
+        finalDate = DateTime(
+          _selectedDate.year,
+          _selectedDate.month,
+          _selectedDate.day,
+          _selectedTime.hour,
+          _selectedTime.minute,
+        );
+      }
 
-      await _firestoreService.createEvent(event);
+      if (widget.eventToEdit != null) {
+        // Update existing event
+        final updatedEvent = GroupEvent(
+          id: widget.eventToEdit!.id,
+          groupId: _selectedGroupId!,
+          creatorId: widget.eventToEdit!.creatorId,
+          title: _titleController.text,
+          description: _descController.text,
+          date: finalDate,
+          hasTime: _hasTime,
+          rsvps: widget.eventToEdit!.rsvps,
+        );
+        await _firestoreService.updateEvent(updatedEvent);
+      } else {
+        // Create new event
+        final event = GroupEvent(
+          id: const Uuid().v4(),
+          groupId: _selectedGroupId!,
+          creatorId: widget.currentUserId,
+          title: _titleController.text,
+          description: _descController.text,
+          date: finalDate,
+          hasTime: _hasTime,
+          rsvps: {widget.currentUserId: 'Yes'},
+        );
+        await _firestoreService.createEvent(event);
+      }
+      
       if (mounted) Navigator.pop(context);
     }
   }
@@ -69,8 +114,8 @@ class _AddEventModalState extends State<AddEventModal> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 730)),
     );
     if (picked != null) {
       setState(() {
@@ -79,8 +124,22 @@ class _AddEventModalState extends State<AddEventModal> {
     }
   }
 
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedTime = picked;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isEditing = widget.eventToEdit != null;
+    
     return Container(
       padding: const EdgeInsets.all(16),
       child: Form(
@@ -88,7 +147,10 @@ class _AddEventModalState extends State<AddEventModal> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Schedule Event", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            Text(
+              isEditing ? "Edit Event" : "Schedule Event", 
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)
+            ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _titleController,
@@ -98,7 +160,9 @@ class _AddEventModalState extends State<AddEventModal> {
             TextFormField(
               controller: _descController,
               decoration: const InputDecoration(labelText: "Description"),
-              maxLines: 3,
+              minLines: 1,
+              maxLines: 5,
+              keyboardType: TextInputType.multiline,
             ),
             const SizedBox(height: 16),
             Row(
@@ -110,6 +174,26 @@ class _AddEventModalState extends State<AddEventModal> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              title: const Text("Include Time"),
+              value: _hasTime,
+              onChanged: (value) {
+                setState(() {
+                  _hasTime = value;
+                });
+              },
+            ),
+            if (_hasTime)
+              Row(
+                children: [
+                  const Text("Time: "),
+                  TextButton(
+                    onPressed: _pickTime,
+                    child: Text(_selectedTime.format(context)),
+                  ),
+                ],
+              ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               value: _selectedGroupId,
@@ -128,7 +212,7 @@ class _AddEventModalState extends State<AddEventModal> {
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _saveEvent,
-              child: const Text("Create Event"),
+              child: Text(isEditing ? "Save Changes" : "Create Event"),
             ),
           ],
         ),

@@ -109,7 +109,7 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Manage Groups", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const Text("Groups", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                 IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
               ],
             ),

@@ -177,6 +177,14 @@ class FirestoreService {
     }
   }
 
+  Future<void> updateEvent(GroupEvent event) async {
+    await _db.collection('events').doc(event.id).update(event.toMap());
+  }
+
+  Future<void> deleteEvent(String eventId) async {
+    await _db.collection('events').doc(eventId).delete();
+  }
+
   Future<void> rsvpEvent(String eventId, String userId, String status) async {
     await _db.collection('events').doc(eventId).update({
       'rsvps.$userId': status,

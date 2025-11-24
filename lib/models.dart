@@ -174,6 +174,7 @@ class GroupEvent {
   final String title;
   final String description;
   final DateTime date;
+  final bool hasTime;
   final Map<String, String> rsvps; // userId -> status ('Yes', 'No', 'Maybe')
 
   GroupEvent({
@@ -183,6 +184,7 @@ class GroupEvent {
     required this.title,
     required this.description,
     required this.date,
+    this.hasTime = false,
     required this.rsvps,
   });
 
@@ -195,6 +197,7 @@ class GroupEvent {
       title: data['title'] ?? '',
       description: data['description'] ?? '',
       date: (data['date'] as Timestamp).toDate(),
+      hasTime: data['hasTime'] ?? false,
       rsvps: Map<String, String>.from(data['rsvps'] ?? {}),
     );
   }
@@ -206,6 +209,7 @@ class GroupEvent {
       'title': title,
       'description': description,
       'date': Timestamp.fromDate(date),
+      'hasTime': hasTime,
       'rsvps': rsvps,
     };
   }

@@ -6,6 +6,8 @@ import 'models.dart';
 import 'firestore_service.dart';
 import 'religious_calendar_helper.dart';
 import 'location_picker.dart';
+import 'add_event_modal.dart';
+import 'widgets/user_avatar.dart';
 
 class DetailModal extends StatefulWidget {
   final DateTime date;
@@ -161,11 +163,17 @@ class _DetailModalState extends State<DetailModal> {
                final isOwner = e.creatorId == widget.currentUserId;
                return ListTile(
                  leading: const Icon(Icons.event, color: Colors.green),
-                 title: Text("${e.title} (${DateFormat('yyyy-MM-dd HH:mm').format(e.date)})"),
+                 title: Text("${e.title} (${e.hasTime ? DateFormat('yyyy-MM-dd HH:mm').format(e.date) : DateFormat('yyyy-MM-dd').format(e.date)})"),
                  subtitle: Column(
                    crossAxisAlignment: CrossAxisAlignment.start,
                    children: [
-                     Text(e.description),
+                     if (e.description.isNotEmpty)
+                       Text(
+                         e.description,
+                         softWrap: true,
+                         maxLines: 3,
+                         overflow: TextOverflow.ellipsis,
+                       ),
                      FutureBuilder<DocumentSnapshot>(
                        future: FirebaseFirestore.instance.collection('users').doc(e.creatorId).get(),
                        builder: (context, snapshot) {
@@ -181,14 +189,30 @@ class _DetailModalState extends State<DetailModal> {
                  trailing: Row(
                    mainAxisSize: MainAxisSize.min,
                    children: [
-                     if (isOwner)
+                     if (isOwner) ...[
+                       IconButton(
+                         icon: const Icon(Icons.edit, color: Colors.blue),
+                         onPressed: () {
+                           Navigator.pop(context);
+                           showModalBottomSheet(
+                             context: context,
+                             isScrollControlled: true,
+                             builder: (context) => AddEventModal(
+                               currentUserId: widget.currentUserId,
+                               initialDate: e.date,
+                               eventToEdit: e,
+                             ),
+                           );
+                         },
+                       ),
                        IconButton(
                          icon: const Icon(Icons.delete, color: Colors.red),
                          onPressed: () async {
-                           await FirebaseFirestore.instance.collection('events').doc(e.id).delete();
+                           await _firestoreService.deleteEvent(e.id);
                            if (mounted) Navigator.pop(context);
                          },
                        ),
+                     ],
                      ElevatedButton(
                        onPressed: () => _showRSVPDialog(e),
                        child: const Text("RSVP"),
@@ -244,25 +268,10 @@ class _DetailModalState extends State<DetailModal> {
                     final isCurrentUser = element.userId == widget.currentUserId;
 
                     return ListTile(
-                      leading: CircleAvatar(
+                      leading: UserAvatar(
+                        photoUrl: photoUrl,
+                        name: name,
                         radius: 20,
-                        backgroundColor: Colors.grey[200],
-                        child: ClipOval(
-                          child: Image.network(
-                            photoUrl != null && photoUrl.isNotEmpty ? photoUrl : "https://ui-avatars.com/api/?name=$name",
-                            width: 40,
-                            height: 40,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Image.network(
-                                "https://ui-avatars.com/api/?name=$name",
-                                width: 40,
-                                height: 40,
-                                fit: BoxFit.cover,
-                              );
-                            },
-                          ),
-                        ),
                       ),
                       title: Text(name),
                       subtitle: Text("${element.nation}, ${element.state ?? ''}"),
