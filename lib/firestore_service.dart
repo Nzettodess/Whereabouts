@@ -54,8 +54,32 @@ class FirestoreService {
     List<String> updatedAdmins = List.from(group.admins)..remove(userId);
 
     if (updatedMembers.isEmpty) {
-      // Delete group if no members left
+      // No members left - delete group and all related data
+      print('Deleting group $groupId and all related data...');
+      
+      // Delete all events for this group
+      final eventsSnapshot = await _db.collection('events')
+          .where('groupId', isEqualTo: groupId)
+          .get();
+      
+      for (var eventDoc in eventsSnapshot.docs) {
+        await eventDoc.reference.delete();
+        print('Deleted event: ${eventDoc.id}');
+      }
+      
+      // Delete all locations for this group (if locations have groupId field)
+      final locationsSnapshot = await _db.collection('user_locations')
+          .where('groupId', isEqualTo: groupId)
+          .get();
+      
+      for (var locationDoc in locationsSnapshot.docs) {
+        await locationDoc.reference.delete();
+        print('Deleted location: ${locationDoc.id}');
+      }
+      
+      // Finally, delete the group itself
       await docRef.delete();
+      print('Group $groupId deleted successfully');
       return;
     }
 

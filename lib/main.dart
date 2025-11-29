@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_fonts/google_fonts.dart'; // Google Fonts for NotoSans SC
+import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
-import 'home.dart'; // Only home.dart, login is imported inside home
+import 'home.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Disable persistence to avoid "Unexpected state" errors from corrupted cache

@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'models.dart';
+import 'environment.dart';
 
 class GoogleCalendarService {
-  static const String _apiKey = 'AIzaSyBrXr7sVmjcwqp201OJlQ9sx2MxQLFzysI';
+  static String get _apiKey => Environment.googleCalendarApiKey;
   static const String _baseUrl = 'https://www.googleapis.com/calendar/v3/calendars';
 
   // Country calendar IDs

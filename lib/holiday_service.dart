@@ -1,46 +1,14 @@
-import 'dart:convert';
 import 'package:http/http.dart' as http;
-
-class Holiday {
-  final DateTime date;
-  final String localName;
-  final String name;
-  final String countryCode;
-
-  Holiday({
-    required this.date,
-    required this.localName,
-    required this.name,
-    required this.countryCode,
-  });
-
-  factory Holiday.fromJsonCalendarific(Map<String, dynamic> json) {
-    return Holiday(
-      date: DateTime.parse(json['date']['iso']),
-      localName: json['name'] ?? '',
-      name: json['name'] ?? '',
-      countryCode: json['country']['id'] ?? '',
-    );
-  }
-
-  factory Holiday.fromJsonFestivo(Map<String, dynamic> json) {
-    return Holiday(
-      date: DateTime.parse(json['date']),
-      localName: json['name'] ?? '',
-      name: json['name'] ?? '',
-      countryCode: json['country'] ?? '',
-    );
-  }
-}
+import 'dart:convert';
+import 'models.dart';
+import 'environment.dart';
 
 class HolidayService {
-  // Calendarific API: https://calendarific.com/api/v2/holidays
   static const String _calendarificBaseUrl = 'https://calendarific.com/api/v2/holidays';
-  static const String _calendarificApiKey = 'XMBhtunafLI3sUlOXnlEDC6hpAnxPlj4';
-
-  // Festivo API: https://api.getfestivo.com/v3/holidays
-  static const String _festivoBaseUrl = 'https://api.getfestivo.com/v3/holidays';
-  static const String _festivoApiKey = 'tok_v3_PYnebUWSMSTXIYwUySQgyE34ev7pliKaLBXMemQ603fqqG9M';
+  static String get _calendarificApiKey => Environment.calendarificApiKey;
+  
+  static const String _festivoBaseUrl = 'https://api.getfestivo.com/v2/holidays';
+  static String get _festivoApiKey => Environment.festivoApiKey;
 
   Future<List<Holiday>> fetchHolidays(String countryCode, int year, {String provider = 'Calendarific'}) async {
     if (provider == 'Festivo') {

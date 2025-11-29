@@ -107,20 +107,72 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
   void _leaveGroup(Group group) async {
     if (_user == null) return;
     
+    // Check if user is the last member
+    final isLastMember = group.members.length == 1;
+    
     bool confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Leave Group?"),
-        content: Text("Are you sure you want to leave ${group.name}?"),
+        title: Text(
+          isLastMember ? "⚠️ Delete Group?" : "Leave Group?",
+          style: TextStyle(color: isLastMember ? Colors.red : null),
+        ),
+        content: isLastMember
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "You are the last member of ${group.name}.",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                const Text("Leaving will permanently delete:"),
+                const SizedBox(height: 8),
+                const Text("• The group"),
+                const Text("• All group events"),
+                const Text("• All group location entries"),
+                const SizedBox(height: 12),
+                const Text(
+                  "⚠️ This action cannot be undone!",
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            )
+          : Text("Are you sure you want to leave ${group.name}?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Leave", style: TextStyle(color: Colors.red))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(isLastMember ? "Delete Group" : "Leave"),
+          ),
         ],
       ),
     ) ?? false;
 
     if (confirm) {
       await _firestoreService.leaveGroup(group.id, _user!.uid);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isLastMember 
+              ? "Group and all related data deleted" 
+              : "Left group successfully"
+            ),
+          ),
+        );
+      }
     }
   }
 
