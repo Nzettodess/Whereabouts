@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models.dart';
 import '../religious_calendar_helper.dart';
 import '../detail_modal.dart';
@@ -36,6 +37,30 @@ class HomeCalendar extends StatefulWidget {
 }
 
 class _HomeCalendarState extends State<HomeCalendar> {
+  // Helper to check if a location matches user's default location
+  bool _isAtDefaultLocation(UserLocation location, String? defaultLocation) {
+    if (defaultLocation == null || defaultLocation.isEmpty) {
+      // No default location set = treat as "away" (show avatar)
+      return false;
+    }
+    
+    // Strip emojis from default location
+    String stripEmojis(String text) {
+      return text.replaceAll(RegExp(r'[\u{1F1E6}-\u{1F1FF}]|\p{Emoji_Presentation}|\p{Emoji}\uFE0F', unicode: true), '').trim();
+    }
+    
+    // Parse default location: "Country, State" or "Country"
+    final parts = defaultLocation.split(',');
+    final defaultCountry = stripEmojis(parts[0].trim());
+    final defaultState = parts.length > 1 ? stripEmojis(parts[1].trim()) : null;
+    
+    // Compare (case-insensitive)
+    final countryMatches = location.nation.trim().toLowerCase() == defaultCountry.toLowerCase();
+    final stateMatches = (location.state?.trim().toLowerCase() ?? '') == (defaultState?.toLowerCase() ?? '');
+    
+    return countryMatches && stateMatches;
+  }
+
   // Helper to get effective locations for a date
   List<UserLocation> _getLocationsForDate(DateTime date) {
     // 1. Get explicit locations
@@ -65,6 +90,15 @@ class _HomeCalendarState extends State<HomeCalendar> {
 
     return [...explicit, ...defaults];
   }
+
+
+  // Helper to get users with explicit location entries (for avatar display)
+  List<UserLocation> _getTravelersForDate(DateTime date) {
+    // Simply return explicit locations - if they manually set it, show avatar
+    return widget.locations.where((l) => 
+      l.date.year == date.year && l.date.month == date.month && l.date.day == date.day).toList();
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +131,9 @@ class _HomeCalendarState extends State<HomeCalendar> {
                          date.day == DateTime.now().day;
           final isCurrentMonth = date.month == widget.currentViewMonth.month;
           
-          final dayLocations = _getLocationsForDate(date);
+          // ignore: unused_local_variable - needed for onTap handler below
+          final dayLocations = _getLocationsForDate(date);  // For detail modal
+          final dayTravelers = _getTravelersForDate(date);  // For avatar display
           final dayHolidays = widget.holidays.where((h) => 
             h.date.year == date.year && h.date.month == date.month && h.date.day == date.day).toList();
           final dayEvents = widget.events.where((e) => 
@@ -205,29 +241,88 @@ class _HomeCalendarState extends State<HomeCalendar> {
                     ),
                   
                   const Spacer(),
-                  // Avatars
-                  if (dayLocations.isNotEmpty)
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      spacing: 1,
-                      runSpacing: 1,
-                      children: dayLocations.take(4).map((l) {
-                        final user = widget.allUsers.firstWhere((u) => u['uid'] == l.userId, orElse: () => {});
-                        final name = user['displayName'] ?? user['email'] ?? "User";
-                        final photoUrl = user['photoURL'];
-                        
-                        final imageUrl = (photoUrl != null && photoUrl is String && photoUrl.isNotEmpty) 
-                          ? photoUrl 
-                          : "https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&size=24";
-                        
-                        return Opacity(
-                          opacity: isCurrentMonth ? 1.0 : 0.5,
-                          child: CircleAvatar(
-                            radius: 5,
-                            backgroundImage: NetworkImage(imageUrl),
+                  // Avatars - show for users with explicit location entries
+                  if (dayTravelers.isNotEmpty)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        ...dayTravelers.take(8).map((l) {
+                          final user = widget.allUsers.firstWhere((u) => u['uid'] == l.userId, orElse: () => {});
+                          final name = user['displayName'] ?? user['email'] ?? "User";
+                          final photoUrl = user['photoURL'];
+                          
+                          // Dynamic sizing based on count
+                          final count = dayTravelers.length;
+                          final double avatarSize = count <= 8 
+                            ? 24.0  // Large - fits 8 avatars nicely in one row
+                            : count <= 12 
+                              ? 16.0  // Medium for larger groups
+                              : 14.0; // Small for very large groups
+                          
+                          // Use imageUrl: either photoUrl or fallback
+                          final imageUrl = (photoUrl != null && photoUrl is String && photoUrl.isNotEmpty) 
+                            ? photoUrl 
+                            : "https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&size=${(avatarSize * 3).toInt()}";
+                          
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 2),
+                            child: Opacity(
+                              opacity: isCurrentMonth ? 1.0 : 0.5,
+                              child: ClipOval(
+                                child: CachedNetworkImage(
+                                  imageUrl: imageUrl,
+                                  width: avatarSize,
+                                  height: avatarSize,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => Container(
+                                    width: avatarSize,
+                                    height: avatarSize,
+                                    color: Colors.grey[200],
+                                  ),
+                                  errorWidget: (context, url, error) {
+                                    // Tier 2: If primary image fails, try ui-avatars
+                                    return Image.network(
+                                      "https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&size=${(avatarSize * 3).toInt()}",
+                                      width: avatarSize,
+                                      height: avatarSize,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        // Tier 3: Ultimate fallback - person icon
+                                        return Container(
+                                          width: avatarSize,
+                                          height: avatarSize,
+                                          color: Colors.grey[300],
+                                          child: Icon(Icons.person, size: avatarSize * 0.6, color: Colors.grey[600]),
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                        // Show +N more indicator if there are more than 8
+                        if (dayTravelers.length > 8)
+                          Container(
+                            width: 14,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[700],
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                '+${dayTravelers.length - 8}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 7,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                           ),
-                        );
-                      }).toList(),
+                      ],
                     ),
                 ],
               ),

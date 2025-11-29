@@ -30,7 +30,14 @@ class FirestoreService {
   }
 
   Future<void> joinGroup(String groupId, String userId) async {
-    await _db.collection('groups').doc(groupId).update({
+    final docRef = _db.collection('groups').doc(groupId);
+    final doc = await docRef.get();
+    
+    if (!doc.exists) {
+      throw Exception("Group not found. The group ID may be incorrect or the group may have been deleted.");
+    }
+    
+    await docRef.update({
       'members': FieldValue.arrayUnion([userId]),
     });
   }
@@ -115,6 +122,73 @@ class FirestoreService {
     
     await batch.commit();
   }
+
+  // Set Location Range - updates location for multiple days
+  Future<void> setLocationRange(
+    String userId,
+    String groupId,
+    DateTime startDate,
+    DateTime endDate,
+    String nation,
+    String? state,
+  ) async {
+    // Get all groups the user is in
+    final groups = await getUserGroupsSnapshot(userId);
+    
+    // Calculate all dates in range
+    final dates = <DateTime>[];
+    var currentDate = DateTime(startDate.year, startDate.month, startDate.day);
+    final end = DateTime(endDate.year, endDate.month, endDate.day);
+    
+    while (!currentDate.isAfter(end)) {
+      dates.add(currentDate);
+      currentDate = currentDate.add(const Duration(days: 1));
+    }
+    
+    // Firestore batch limit is 500 operations
+    // Each date * each group = one operation
+    const maxOpsPerBatch = 500;
+    final allOperations = <Map<String, dynamic>>[];
+    
+    for (final date in dates) {
+      for (final group in groups) {
+        final dateStr = "${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}";
+        final docId = "${userId}_${group.id}_$dateStr";
+        
+        allOperations.add({
+          'docId': docId,
+          'userId': userId,
+          'groupId': group.id,
+          'date': Timestamp.fromDate(date),
+          'nation': nation,
+          'state': state,
+        });
+      }
+    }
+    
+    // Execute in batches
+    for (var i = 0; i < allOperations.length; i += maxOpsPerBatch) {
+      final batch = _db.batch();
+      final end = (i + maxOpsPerBatch < allOperations.length) 
+          ? i + maxOpsPerBatch 
+          : allOperations.length;
+      
+      for (var j = i; j < end; j++) {
+        final op = allOperations[j];
+        final locationRef = _db.collection('user_locations').doc(op['docId']);
+        batch.set(locationRef, {
+          'userId': op['userId'],
+          'groupId': op['groupId'],
+          'date': op['date'],
+          'nation': op['nation'],
+          'state': op['state'],
+        }, SetOptions(merge: true));
+      }
+      
+      await batch.commit();
+    }
+  }
+
 
   Stream<List<UserLocation>> getGroupLocations(
       List<String> memberIds, DateTime date) {

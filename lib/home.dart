@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart'; // Needed for CalendarController
 import 'login.dart';
 import 'profile.dart';
@@ -43,14 +44,33 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
   @override
   void initState() {
     super.initState();
-    _loadUserProfile();
-    _loadData();
+    
+    // Listen to auth state changes (login/logout)
+    FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      setState(() {
+        _user = user;
+      });
+      
+      if (user != null) {
+        // User logged in
+        _loadUserProfile();
+        _loadData();
+      } else {
+        // User logged out - clear data
+        setState(() {
+          _photoUrl = null;
+          _locations = [];
+          _events = [];
+          _holidays = [];
+          _allUsers = [];
+        });
+      }
+    });
   }
 
   void _handleLoginSuccess() async {
-    setState(() {
-      _user = FirebaseAuth.instance.currentUser;
-    });
+    // Auth state listener will handle the update
+    // Just reload data manually for immediate update
     await _loadUserProfile();
     _loadData();
   }
@@ -252,31 +272,75 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
     }
   }
 
-  void _openLocationPicker() {
+
+  void _openLocationPicker() async {
+    if (_user == null) return;
+    
+    // Fetch user's default location
+    final doc = await FirebaseFirestore.instance.collection('users').doc(_user!.uid).get();
+    final defaultLocation = doc.data()?['defaultLocation'] as String?;
+    
+    // Helper function to remove emoji flags
+    String stripEmojis(String text) {
+      // Remove emojis (including flag emojis) and extra whitespace
+      return text.replaceAll(RegExp(r'[\u{1F1E6}-\u{1F1FF}]|\p{Emoji_Presentation}|\p{Emoji}\uFE0F', unicode: true), '').trim();
+    }
+    
+    // Parse country and state from default location
+    String? defaultCountry;
+    String? defaultState;
+    
+    if (defaultLocation != null && defaultLocation.isNotEmpty) {
+      final parts = defaultLocation.split(',');
+      
+      if (parts.length == 2) {
+        // Format: "🇲🇾 Country, State" (e.g., "🇲🇾 Malaysia, Penang")
+        defaultCountry = stripEmojis(parts[0].trim());  // First part is COUNTRY
+        defaultState = stripEmojis(parts[1].trim());     // Second part is STATE
+      } else {
+        // Format: "🇺🇸 Country" only
+        defaultCountry = stripEmojis(parts[0].trim());
+      }
+    }
+    
+    if (!mounted) return;
+    
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       builder: (context) => LocationPicker(
-        onLocationSelected: (country, state) async {
-          if (_user != null) {
-            try {
-              await _firestoreService.setLocation(
-                _user!.uid, 
-                "global", 
-                DateTime.now(), 
-                country, 
-                state
+        defaultCountry: defaultCountry,
+        defaultState: defaultState,
+        onLocationSelected: (country, state, startDate, endDate) async {
+          try {
+            await _firestoreService.setLocationRange(
+              _user!.uid,
+              "global",
+              startDate,
+              endDate,
+              country,
+              state,
+            );
+            
+            if (mounted) {
+              final dayCount = endDate.difference(startDate).inDays + 1;
+              final dateRange = dayCount == 1 
+                  ? DateFormat('MMM dd, yyyy').format(startDate)
+                  : "${DateFormat('MMM dd').format(startDate)} - ${DateFormat('MMM dd, yyyy').format(endDate)}";
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    "Location set to ${state != null ? '$state, ' : ''}$country for $dateRange ($dayCount day${dayCount > 1 ? 's' : ''})"
+                  )
+                )
               );
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Location set to $country, ${state ?? ''}"))
-                );
-              }
-            } catch (e) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Error saving location: $e"))
-                );
-              }
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("Error saving location: $e"))
+              );
             }
           }
         },

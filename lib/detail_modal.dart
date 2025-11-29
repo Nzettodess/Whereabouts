@@ -283,22 +283,58 @@ class _DetailModalState extends State<DetailModal> {
                             IconButton(
                               icon: const Icon(Icons.edit, size: 20),
                               onPressed: () async {
+                                // Fetch user's default location for pre-population
+                                final userDoc = await FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(widget.currentUserId)
+                                    .get();
+                                final defaultLocation = userDoc.data()?['defaultLocation'] as String?;
+                                
+                                // Helper function to remove emoji flags
+                                String stripEmojis(String text) {
+                                  return text.replaceAll(RegExp(r'[\u{1F1E6}-\u{1F1FF}]|\p{Emoji_Presentation}|\p{Emoji}\uFE0F', unicode: true), '').trim();
+                                }
+                                
+                                String? defaultCountry;
+                                String? defaultState;
+                                
+                                if (defaultLocation != null && defaultLocation.isNotEmpty) {
+                                  final parts = defaultLocation.split(',');
+                                  if (parts.length == 2) {
+                                    // Format: "🇲🇾 Country, State"
+                                    defaultCountry = stripEmojis(parts[0].trim());  // First part is COUNTRY
+                                    defaultState = stripEmojis(parts[1].trim());     // Second part is STATE
+                                  } else {
+                                    defaultCountry = stripEmojis(parts[0].trim());
+                                  }
+                                }
+                                
+                                if (!mounted) return;
+                                
                                 // Show location picker to edit
                                 final result = await showDialog(
                                   context: context,
                                   builder: (_) => Dialog(
-                                    child: LocationPicker(
-                                      onLocationSelected: (country, state) async {
-                                        // Save the updated location
-                                        await _firestoreService.setLocation(
-                                          widget.currentUserId,
-                                          element.groupId,
-                                          widget.date,
-                                          country,
-                                          state,
-                                        );
-                                        Navigator.pop(context, true); // Return true to indicate success
-                                      },
+                                    child: Container(
+                                      constraints: const BoxConstraints(maxWidth: 500),
+                                      child: LocationPicker(
+                                        defaultCountry: defaultCountry ?? element.nation,
+                                        defaultState: defaultState ?? element.state,
+                                        initialStartDate: widget.date,
+                                        initialEndDate: widget.date, // Default to single day
+                                        onLocationSelected: (country, state, startDate, endDate) async {
+                                          // Save the updated location for date range
+                                          await _firestoreService.setLocationRange(
+                                            widget.currentUserId,
+                                            element.groupId,
+                                            startDate,
+                                            endDate,
+                                            country,
+                                            state,
+                                          );
+                                          Navigator.pop(context, true); // Return true to indicate success
+                                        },
+                                      ),
                                     ),
                                   ),
                                 );

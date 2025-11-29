@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'location_picker.dart';
-import 'firestore_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'login.dart';
+import 'widgets/default_location_picker.dart';
 
 class ProfileDialog extends StatefulWidget {
   final User user;
@@ -64,26 +64,36 @@ class _ProfileDialogState extends State<ProfileDialog> {
                 ),
                 const Divider(),
                 const SizedBox(height: 20),
-                CircleAvatar(
-                  radius: 50,
-                  backgroundColor: Colors.grey[200],
-                  child: ClipOval(
-                    child: Image.network(
-                      photoUrl != null && photoUrl.isNotEmpty 
-                        ? photoUrl 
-                        : "https://ui-avatars.com/api/?name=${Uri.encodeComponent(data?['displayName'] ?? widget.user.email ?? 'User')}",
+                ClipOval(
+                  child: CachedNetworkImage(
+                    imageUrl: (photoUrl != null && photoUrl.isNotEmpty) 
+                      ? photoUrl 
+                      : "https://ui-avatars.com/api/?name=${Uri.encodeComponent(data?['displayName'] ?? widget.user.email ?? 'User')}&size=200",
+                    width: 100,
+                    height: 100,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
                       width: 100,
                       height: 100,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Image.network(
-                          "https://ui-avatars.com/api/?name=${Uri.encodeComponent(data?['displayName'] ?? widget.user.email ?? 'User')}",
-                          width: 100,
-                          height: 100,
-                          fit: BoxFit.cover,
-                        );
-                      },
+                      color: Colors.grey[200],
+                      child: const CircularProgressIndicator(),
                     ),
+                    errorWidget: (context, url, error) {
+                      return Image.network(
+                        "https://ui-avatars.com/api/?name=${Uri.encodeComponent(data?['displayName'] ?? widget.user.email ?? 'User')}&size=200",
+                        width: 100,
+                        height: 100,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 100,
+                            height: 100,
+                            color: Colors.grey[300],
+                            child: Icon(Icons.person, size: 50, color: Colors.grey[600]),
+                          );
+                        },
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -155,11 +165,35 @@ class _ProfileDialogState extends State<ProfileDialog> {
                   title: Text(data?['defaultLocation'] ?? "Not set"),
                   trailing: const Icon(Icons.edit),
                   onTap: () {
+                    // Helper function to remove emoji flags
+                    String stripEmojis(String text) {
+                      return text.replaceAll(RegExp(r'[\u{1F1E6}-\u{1F1FF}]|\p{Emoji_Presentation}|\p{Emoji}\uFE0F', unicode: true), '').trim();
+                    }
+                    
+                    final defaultLocation = data?['defaultLocation'];
+                    String? defaultCountry;
+                    String? defaultState;
+                    
+                    if (defaultLocation != null && defaultLocation.isNotEmpty) {
+                      final parts = defaultLocation.split(',');
+                      if (parts.length == 2) {
+                        // Format: "🇲🇾 Country, State"
+                        defaultCountry = stripEmojis(parts[0].trim());  // First part is COUNTRY
+                        defaultState = stripEmojis(parts[1].trim());     // Second part is STATE
+                      } else {
+                        defaultCountry = stripEmojis(parts[0].trim());
+                      }
+                    }
+                    
                     showModalBottomSheet(
                       context: context,
-                      builder: (context) => LocationPicker(
+                      isScrollControlled: true,
+                      builder: (context) => DefaultLocationPicker(
+                        defaultCountry: defaultCountry,
+                        defaultState: defaultState,
                         onLocationSelected: (country, state) async {
-                          final loc = state != null ? "$state, $country" : country;
+                          // Save in "Country, State" format (not "State, Country")
+                          final loc = state != null ? "$country, $state" : country;
                           await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
                             'defaultLocation': loc,
                           });
@@ -173,10 +207,36 @@ class _ProfileDialogState extends State<ProfileDialog> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
                   onPressed: () async {
-                    await FirebaseAuth.instance.signOut();
-                    if (mounted) {
-                      // Just pop - the auth state listener will handle showing login
-                      Navigator.of(context).pop();
+                    // Show confirmation dialog
+                    bool? confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text("Logout"),
+                        content: const Text("Are you sure you want to logout?"),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text("Cancel"),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text("Logout"),
+                          ),
+                        ],
+                      ),
+                    );
+                    
+                    if (confirm == true) {
+                      await FirebaseAuth.instance.signOut();
+                      if (mounted) {
+                        // Close profile dialog and return to login screen
+                        // The auth state listener in home.dart will handle showing login
+                        Navigator.of(context).pop();
+                      }
                     }
                   },
                   child: const Text("Logout"),

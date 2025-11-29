@@ -35,9 +35,39 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
 
   void _joinGroup() async {
     if (_joinCodeController.text.isEmpty || _user == null) return;
-    await _firestoreService.joinGroup(_joinCodeController.text, _user!.uid);
-    _joinCodeController.clear();
-    if (mounted) Navigator.pop(context); // Close join dialog
+    
+    try {
+      await _firestoreService.joinGroup(_joinCodeController.text, _user!.uid);
+      _joinCodeController.clear();
+      if (mounted) {
+        Navigator.pop(context); // Close join dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Successfully joined group!"))
+        );
+      }
+    } catch (e) {
+      _joinCodeController.clear();
+      if (mounted) {
+        Navigator.pop(context); // Close join dialog
+        
+        // Show error dialog
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text("Group Not Found"),
+            content: Text(
+              "The group ID you entered does not exist. Please check the ID and try again.\n\nError: ${e.toString()}"
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("OK"),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 
   void _showCreateDialog() {

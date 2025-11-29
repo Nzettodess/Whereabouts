@@ -49,6 +49,8 @@ dependencies:
   hijri: ^3.0.0
   google_fonts: ^6.3.2
   cached_network_image: ^3.3.1
+  intl: ^0.20.2
+
 
 
 dev_dependencies:
