@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:csc_picker_plus/csc_picker_plus.dart';
 import 'package:intl/intl.dart';
+import 'widgets/syncfusion_date_picker.dart';
 
 class LocationPicker extends StatefulWidget {
   final Function(String country, String? state, DateTime startDate, DateTime endDate) onLocationSelected;
@@ -42,11 +43,12 @@ class _LocationPickerState extends State<LocationPicker> {
   }
 
   Future<void> _selectStartDate() async {
-    final picked = await showDatePicker(
+    final picked = await showSyncfusionDatePicker(
       context: context,
       initialDate: startDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
+      helpText: 'Select Start Date',
     );
     if (picked != null) {
       setState(() {
@@ -60,11 +62,12 @@ class _LocationPickerState extends State<LocationPicker> {
   }
 
   Future<void> _selectEndDate() async {
-    final picked = await showDatePicker(
+    final picked = await showSyncfusionDatePicker(
       context: context,
       initialDate: endDate.isBefore(startDate) ? startDate : endDate,
       firstDate: startDate, // Can't select before start date
       lastDate: DateTime(2030),
+      helpText: 'Select End Date',
     );
     if (picked != null) {
       setState(() {

@@ -41,6 +41,7 @@ dependencies:
   google_sign_in: ^6.2.1
   shared_preferences: ^2.3.3
   syncfusion_flutter_calendar: ^31.1.20
+  syncfusion_flutter_datepicker: ^31.1.20
   http: ^1.6.0
   grouped_list: ^6.0.0
   uuid: ^4.5.2

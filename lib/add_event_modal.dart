@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
 import 'models.dart';
 import 'firestore_service.dart';
+import 'widgets/syncfusion_date_picker.dart';
 
 class AddEventModal extends StatefulWidget {
   final String currentUserId;
@@ -115,11 +116,12 @@ class _AddEventModalState extends State<AddEventModal> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
+    final picked = await showSyncfusionDatePicker(
       context: context,
       initialDate: _selectedDate,
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now().add(const Duration(days: 730)),
+      helpText: 'Select Event Date',
     );
     if (picked != null) {
       setState(() {

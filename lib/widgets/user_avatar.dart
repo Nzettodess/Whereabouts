@@ -29,6 +29,10 @@ class UserAvatar extends StatelessWidget {
           width: radius * 2,
           height: radius * 2,
           fit: BoxFit.cover,
+          httpHeaders: const {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://google.com',
+          },
           placeholder: (context, url) => const CircularProgressIndicator(strokeWidth: 2),
           errorWidget: (context, url, error) {
             // Fallback to ui-avatars on error

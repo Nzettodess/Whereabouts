@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'login.dart';
 import 'widgets/default_location_picker.dart';
+import 'widgets/syncfusion_date_picker.dart';
 
 class ProfileDialog extends StatefulWidget {
   final User user;
@@ -80,6 +81,10 @@ class _ProfileDialogState extends State<ProfileDialog> {
                         width: 80,
                         height: 80,
                         fit: BoxFit.cover,
+                        httpHeaders: const {
+                          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                          'Referer': 'https://google.com',
+                        },
                         placeholder: (context, url) {
                           print('[Profile Avatar] Loading placeholder');
                           return Container(
@@ -92,12 +97,14 @@ class _ProfileDialogState extends State<ProfileDialog> {
                         errorWidget: (context, url, error) {
                           print('[Profile Avatar] Error: $error');
                           print('[Profile Avatar] Failed URL: $url');
+                          // Fallback to ui-avatars.com
                           return Image.network(
                             "https://ui-avatars.com/api/?name=${Uri.encodeComponent(data?['displayName'] ?? widget.user.email ?? 'User')}&size=160",
                             width: 80,
                             height: 80,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
+                              // Final fallback to icon
                               return Container(
                                 width: 80,
                                 height: 80,
@@ -270,7 +277,7 @@ class _ProfileDialogState extends State<ProfileDialog> {
                             initialDate = DateTime(now.year - 25, now.month, now.day);
                           }
 
-                          final selectedDate = await showDatePicker(
+                          final selectedDate = await showSyncfusionDatePicker(
                             context: context,
                             initialDate: initialDate,
                             firstDate: DateTime(1900),

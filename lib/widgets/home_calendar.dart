@@ -302,6 +302,10 @@ class _HomeCalendarState extends State<HomeCalendar> {
                                   width: avatarSize,
                                   height: avatarSize,
                                   fit: BoxFit.cover,
+                                  httpHeaders: const {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                    'Referer': 'https://google.com',
+                                  },
                                   placeholder: (context, url) {
                                     print('[Avatar] Loading placeholder for: $name');
                                     return Container(
