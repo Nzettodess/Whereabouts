@@ -10,7 +10,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Load environment variables from .env file
-  await dotenv.load(fileName: ".env");
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    // .env file might not exist in production/web builds
+    debugPrint("Note: .env file not found. Relying on --dart-define variables.");
+  }
   
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
