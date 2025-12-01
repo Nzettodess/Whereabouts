@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'models.dart';
 import 'firestore_service.dart';
 import 'widgets/user_avatar.dart';
-import 'detail_modal.dart';
 
 enum EventFilter { all, upcoming, past }
 

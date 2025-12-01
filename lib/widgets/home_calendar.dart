@@ -37,29 +37,7 @@ class HomeCalendar extends StatefulWidget {
 }
 
 class _HomeCalendarState extends State<HomeCalendar> {
-  // Helper to check if a location matches user's default location
-  bool _isAtDefaultLocation(UserLocation location, String? defaultLocation) {
-    if (defaultLocation == null || defaultLocation.isEmpty) {
-      // No default location set = treat as "away" (show avatar)
-      return false;
-    }
-    
-    // Strip emojis from default location
-    String stripEmojis(String text) {
-      return text.replaceAll(RegExp(r'[\u{1F1E6}-\u{1F1FF}]|\p{Emoji_Presentation}|\p{Emoji}\uFE0F', unicode: true), '').trim();
-    }
-    
-    // Parse default location: "Country, State" or "Country"
-    final parts = defaultLocation.split(',');
-    final defaultCountry = stripEmojis(parts[0].trim());
-    final defaultState = parts.length > 1 ? stripEmojis(parts[1].trim()) : null;
-    
-    // Compare (case-insensitive)
-    final countryMatches = location.nation.trim().toLowerCase() == defaultCountry.toLowerCase();
-    final stateMatches = (location.state?.trim().toLowerCase() ?? '') == (defaultState?.toLowerCase() ?? '');
-    
-    return countryMatches && stateMatches;
-  }
+
 
   // Helper to get effective locations for a date
   List<UserLocation> _getLocationsForDate(DateTime date) {
