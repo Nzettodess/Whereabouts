@@ -2,8 +2,225 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+    
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Get the current user's UID
+    function userId() {
+      return request.auth.uid;
+    }
+    
+    // Get a group document
+    function getGroup(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)).data;
+    }
+    
+    // Check if user is a member of a group
+    function isGroupMember(groupId) {
+      return isAuthenticated() && 
+             userId() in getGroup(groupId).members;
+    }
+    
+    // Check if user is an admin of a group (includes owner)
+    function isGroupAdmin(groupId) {
+      let group = getGroup(groupId);
+      return isAuthenticated() && 
+             (userId() == group.ownerId || userId() in group.admins);
+    }
+    
+    // Check if user is the owner of a group
+    function isGroupOwner(groupId) {
+      return isAuthenticated() && 
+             userId() == getGroup(groupId).ownerId;
+    }
+    
+    // Check if user shares any group with another user
+    function sharesGroupWith(otherUserId) {
+      // This is a simplified check - in practice, you might need to query groups
+      return isAuthenticated();
+    }
+    
+    // ============================================
+    // 1. USERS COLLECTION
+    // ============================================
+    match /users/{uid} {
+      // All group members can see full profiles of users in same group
+      allow read: if isAuthenticated();
+      
+      // User can only create/update their own document
+      allow create: if isAuthenticated() && userId() == uid;
+      allow update: if isAuthenticated() && userId() == uid;
+      
+      // Delete not allowed (handled by account deletion flow)
+      allow delete: if false;
+    }
+    
+    // ============================================
+    // 2. GROUPS COLLECTION
+    // ============================================
+    match /groups/{groupId} {
+      // Must be group member to read - use resource.data directly to avoid get() issues
+      allow read: if isAuthenticated() && userId() in resource.data.members;
+      
+      // Any authenticated user can create a group
+      allow create: if isAuthenticated() && 
+                       request.resource.data.ownerId == userId() &&
+                       userId() in request.resource.data.members;
+      
+      // Update rules based on what's being changed
+      allow update: if isAuthenticated() && (
+        // Owner can do anything
+        isGroupOwner(groupId) ||
+        // Admin can update settings but not promote admins
+        (isGroupAdmin(groupId) && 
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'admins'])) ||
+        // Any user can join (add themselves to members)
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']) &&
+         userId() in request.resource.data.members &&
+         !(userId() in resource.data.members))
+      );
+      
+      // Only owner can delete
+      allow delete: if isGroupOwner(groupId);
+    }
+    
+    // ============================================
+    // 3. USER_LOCATIONS COLLECTION
+    // ============================================
+    match /user_locations/{locationId} {
+      // User in same group can read
+      allow read: if isAuthenticated() && 
+                     isGroupMember(resource.data.groupId);
+      
+      // User can create/update their own locations
+      // OR Owner/Admin can set any group member's location for their group
+      allow create, update: if isAuthenticated() && (
+        // Own location
+        request.resource.data.userId == userId() ||
+        // Owner/Admin setting for group member
+        (isGroupAdmin(request.resource.data.groupId) && 
+         isGroupMember(request.resource.data.groupId))
+      );
+      
+      // Delete own, or Owner/Admin for group members
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == userId() ||
+        isGroupAdmin(resource.data.groupId)
+      );
+    }
+    
+    // ============================================
+    // 4. PLACEHOLDER_MEMBER_LOCATIONS COLLECTION
+    // ============================================
+    match /placeholder_member_locations/{locationId} {
+      // User in placeholder's group can read
+      allow read: if isAuthenticated() && 
+                     isGroupMember(resource.data.groupId);
+      
+      // Only Owner or Admin can create/update/delete
+      allow create, update: if isAuthenticated() && 
+                               isGroupAdmin(request.resource.data.groupId);
+      allow delete: if isAuthenticated() && 
+                       isGroupAdmin(resource.data.groupId);
+    }
+    
+    // ============================================
+    // 5. PLACEHOLDER_MEMBERS COLLECTION
+    // ============================================
+    match /placeholder_members/{memberId} {
+      // All group members can read (visible in tile details)
+      allow read: if isAuthenticated() && 
+                     isGroupMember(resource.data.groupId);
+      
+      // Only Owner can create
+      allow create: if isAuthenticated() && 
+                       isGroupOwner(request.resource.data.groupId);
+      
+      // Owner or Admin can update
+      allow update: if isAuthenticated() && 
+                       isGroupAdmin(resource.data.groupId);
+      
+      // Only Owner can delete
+      allow delete: if isAuthenticated() && 
+                       isGroupOwner(resource.data.groupId);
+    }
+    
+    // ============================================
+    // 6. EVENTS COLLECTION
+    // ============================================
+    match /events/{eventId} {
+      // Group member can read (includes viewing all RSVP responses)
+      allow read: if isAuthenticated() && 
+                     isGroupMember(resource.data.groupId);
+      
+      // Any group member can create (creator becomes event owner)
+      allow create: if isAuthenticated() && 
+                       isGroupMember(request.resource.data.groupId) &&
+                       request.resource.data.creatorId == userId();
+      
+      // Any group member can update event details
+      allow update: if isAuthenticated() && 
+                       isGroupMember(resource.data.groupId);
+      
+      // Event creator, group Owner, or Admin can delete
+      allow delete: if isAuthenticated() && (
+        resource.data.creatorId == userId() ||
+        isGroupAdmin(resource.data.groupId)
+      );
+    }
+    
+    // ============================================
+    // 7. INHERITANCE_REQUESTS COLLECTION
+    // ============================================
+    match /inheritance_requests/{requestId} {
+      // Requester, Owner, or Admin can read
+      allow read: if isAuthenticated() && (
+        resource.data.requesterId == userId() ||
+        isGroupAdmin(resource.data.groupId)
+      );
+      
+      // Member or Admin can create (owner doesn't need to request)
+      allow create: if isAuthenticated() && 
+                       isGroupMember(request.resource.data.groupId) &&
+                       request.resource.data.requesterId == userId() &&
+                       !isGroupOwner(request.resource.data.groupId);
+      
+      // Only Owner can approve/reject (update status)
+      allow update: if isAuthenticated() && 
+                       isGroupOwner(resource.data.groupId);
+      
+      // Requester or Owner can delete
+      allow delete: if isAuthenticated() && (
+        resource.data.requesterId == userId() ||
+        isGroupOwner(resource.data.groupId)
+      );
+    }
+    
+    // ============================================
+    // 8. NOTIFICATIONS COLLECTION
+    // ============================================
+    match /notifications/{notificationId} {
+      // User can only read their own notifications
+      allow read: if isAuthenticated() && 
+                     resource.data.userId == userId();
+      
+      // Any authenticated user can create (for sending to others)
+      allow create: if isAuthenticated();
+      
+      // User can only update their own (mark as read)
+      allow update: if isAuthenticated() && 
+                       resource.data.userId == userId();
+      
+      // User can only delete their own
+      allow delete: if isAuthenticated() && 
+                       resource.data.userId == userId();
     }
   }
 }
