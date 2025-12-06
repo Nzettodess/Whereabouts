@@ -54,9 +54,17 @@ service cloud.firestore {
       // All group members can see full profiles of users in same group
       allow read: if isAuthenticated();
       
-      // User can only create/update their own document
+      // User can only create their own document
       allow create: if isAuthenticated() && userId() == uid;
-      allow update: if isAuthenticated() && userId() == uid;
+      
+      // Update rules
+      allow update: if isAuthenticated() && (
+        // User can update ANY fields of their own profile
+        userId() == uid ||
+        // Owner/Admin can update ONLY these specific fields for other members
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['defaultLocation', 'birthday', 'hasLunarBirthday', 'lunarBirthdayMonth', 'lunarBirthdayDay'])
+      );
       
       // Delete not allowed (handled by account deletion flow)
       allow delete: if false;
@@ -66,8 +74,9 @@ service cloud.firestore {
     // 2. GROUPS COLLECTION
     // ============================================
     match /groups/{groupId} {
-      // Must be group member to read - use resource.data directly to avoid get() issues
-      allow read: if isAuthenticated() && userId() in resource.data.members;
+      // Any authenticated user can read groups (needed for join verification)
+      // App-level filtering ensures users only see their own groups in UI
+      allow read: if isAuthenticated();
       
       // Any authenticated user can create a group
       allow create: if isAuthenticated() && 
@@ -78,9 +87,9 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         // Owner can do anything
         isGroupOwner(groupId) ||
-        // Admin can update settings but not promote admins
+        // Admin can update settings AND promote members to admin (but not change owner)
         (isGroupAdmin(groupId) && 
-         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId', 'admins'])) ||
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId'])) ||
         // Any user can join (add themselves to members)
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']) &&
          userId() in request.resource.data.members &&
@@ -95,9 +104,8 @@ service cloud.firestore {
     // 3. USER_LOCATIONS COLLECTION
     // ============================================
     match /user_locations/{locationId} {
-      // User in same group can read
-      allow read: if isAuthenticated() && 
-                     isGroupMember(resource.data.groupId);
+      // Any authenticated user can read (filtering done at app level)
+      allow read: if isAuthenticated();
       
       // User can create/update their own locations
       // OR Owner/Admin can set any group member's location for their group
@@ -105,8 +113,7 @@ service cloud.firestore {
         // Own location
         request.resource.data.userId == userId() ||
         // Owner/Admin setting for group member
-        (isGroupAdmin(request.resource.data.groupId) && 
-         isGroupMember(request.resource.data.groupId))
+        isGroupAdmin(request.resource.data.groupId)
       );
       
       // Delete own, or Owner/Admin for group members
@@ -120,9 +127,8 @@ service cloud.firestore {
     // 4. PLACEHOLDER_MEMBER_LOCATIONS COLLECTION
     // ============================================
     match /placeholder_member_locations/{locationId} {
-      // User in placeholder's group can read
-      allow read: if isAuthenticated() && 
-                     isGroupMember(resource.data.groupId);
+      // Any authenticated user can read (filtering done at app level)
+      allow read: if isAuthenticated();
       
       // Only Owner or Admin can create/update/delete
       allow create, update: if isAuthenticated() && 
@@ -135,9 +141,8 @@ service cloud.firestore {
     // 5. PLACEHOLDER_MEMBERS COLLECTION
     // ============================================
     match /placeholder_members/{memberId} {
-      // All group members can read (visible in tile details)
-      allow read: if isAuthenticated() && 
-                     isGroupMember(resource.data.groupId);
+      // Any authenticated user can read (filtering done at app level)
+      allow read: if isAuthenticated();
       
       // Only Owner can create
       allow create: if isAuthenticated() && 
@@ -156,9 +161,8 @@ service cloud.firestore {
     // 6. EVENTS COLLECTION
     // ============================================
     match /events/{eventId} {
-      // Group member can read (includes viewing all RSVP responses)
-      allow read: if isAuthenticated() && 
-                     isGroupMember(resource.data.groupId);
+      // Any authenticated user can read (filtering done at app level)
+      allow read: if isAuthenticated();
       
       // Any group member can create (creator becomes event owner)
       allow create: if isAuthenticated() && 

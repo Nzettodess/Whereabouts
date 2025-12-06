@@ -258,21 +258,20 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                                 },
                                 tooltip: 'Manage Placeholders',
                               ),
-                            // Manage Members button (owner only)
-                            if (isOwner)
-                              IconButton(
-                                icon: const Icon(Icons.group, color: Colors.green),
-                                onPressed: () {
-                                  showDialog(
-                                    context: context,
-                                    builder: (_) => MemberManagement(
-                                      group: group,
-                                      currentUserId: _user!.uid,
-                                    ),
-                                  );
-                                },
-                                tooltip: 'Manage Members',
-                              ),
+                            // Manage Members button (all roles can view)
+                            IconButton(
+                              icon: const Icon(Icons.group, color: Colors.green),
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => MemberManagement(
+                                    group: group,
+                                    currentUserId: _user!.uid,
+                                  ),
+                                );
+                              },
+                              tooltip: 'Manage Members',
+                            ),
                             IconButton(
                               icon: const Icon(Icons.exit_to_app, color: Colors.red),
                               onPressed: () => _leaveGroup(group),

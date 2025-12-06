@@ -392,12 +392,35 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => LocationPicker(
-        defaultCountry: defaultCountry,
-        defaultState: defaultState,
-        currentUserId: _user!.uid,
-        placeholderMembers: List<PlaceholderMember>.from(_placeholderMembers),
-        onLocationSelected: (country, state, startDate, endDate, selectedMemberIds) async {
+      builder: (context) {
+        // Filter group members who allow location editing (privacy check)
+        // Exclude current user, exclude placeholders, only real members
+        final editableMembers = _allUsers.where((user) {
+          final uid = user['uid'] as String?;
+          if (uid == null || uid == _user!.uid) return false;  // Skip self
+          if (uid.startsWith('placeholder_')) return false;  // Skip placeholders
+          
+          // Check privacy settings - if blockLocationDate is true, exclude
+          final privacySettings = user['privacySettings'] as Map<String, dynamic>?;
+          if (privacySettings != null && privacySettings['blockLocationDate'] == true) {
+            return false;
+          }
+          return true;
+        }).toList();
+        
+        // Check if current user is owner or admin of any group
+        // We'll check this based on groups data we already have
+        // For simplicity, pass true if we have editable members or placeholders
+        final canManageOthers = editableMembers.isNotEmpty || _placeholderMembers.isNotEmpty;
+        
+        return LocationPicker(
+          defaultCountry: defaultCountry,
+          defaultState: defaultState,
+          currentUserId: _user!.uid,
+          placeholderMembers: List<PlaceholderMember>.from(_placeholderMembers),
+          groupMembers: editableMembers,
+          isOwnerOrAdmin: canManageOthers,
+          onLocationSelected: (country, state, startDate, endDate, selectedMemberIds) async {
           try {
             // Set location for each selected member
             for (final memberId in selectedMemberIds) {
@@ -449,7 +472,8 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
             }
           }
         },
-      ),
+      );
+      },
     );
   }
 

@@ -12,6 +12,10 @@ class LocationPicker extends StatefulWidget {
   final DateTime? initialEndDate;
   final String currentUserId;
   final List<PlaceholderMember> placeholderMembers;
+  // Group members who allow location editing (filtered by privacy settings)
+  final List<Map<String, dynamic>> groupMembers;
+  // Is current user owner or admin (can set location for others)
+  final bool isOwnerOrAdmin;
 
   const LocationPicker({
     super.key, 
@@ -22,6 +26,8 @@ class LocationPicker extends StatefulWidget {
     this.initialEndDate,
     required this.currentUserId,
     this.placeholderMembers = const [],
+    this.groupMembers = const [],
+    this.isOwnerOrAdmin = false,
   });
 
   @override
@@ -176,8 +182,9 @@ class _LocationPickerState extends State<LocationPicker> {
             ),
             const SizedBox(height: 16),
             
-            // Member Selection (if there are placeholder members)
-            if (widget.placeholderMembers.isNotEmpty) ...[
+            // Member Selection (if owner/admin with members to manage, or placeholder members exist)
+            if (widget.placeholderMembers.isNotEmpty || 
+                (widget.isOwnerOrAdmin && widget.groupMembers.isNotEmpty)) ...[
               Container(
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.grey.shade300),
@@ -227,34 +234,78 @@ class _LocationPickerState extends State<LocationPicker> {
                         });
                       },
                     ),
-                    // Placeholder members
-                    ...widget.placeholderMembers.map((placeholder) => CheckboxListTile(
-                      dense: true,
-                      title: Row(
-                        children: [
-                          const Icon(Icons.person_outline, size: 20, color: Colors.grey),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              "👻 ${placeholder.displayName}",
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
+                    // Group members (who allow location editing)
+                    if (widget.isOwnerOrAdmin && widget.groupMembers.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: Text("Group Members", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
                       ),
-                      value: selectedMemberIds.contains(placeholder.id),
-                      onChanged: (value) {
-                        setState(() {
-                          if (value == true) {
-                            selectedMemberIds.add(placeholder.id);
-                          } else {
-                            if (selectedMemberIds.length > 1) {
-                              selectedMemberIds.remove(placeholder.id);
+                      ...widget.groupMembers.map((member) {
+                        final memberId = member['uid'] as String;
+                        final displayName = member['displayName'] ?? member['email'] ?? 'Unknown';
+                        return CheckboxListTile(
+                          dense: true,
+                          title: Row(
+                            children: [
+                              const Icon(Icons.person, size: 20, color: Colors.green),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  displayName,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          value: selectedMemberIds.contains(memberId),
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                selectedMemberIds.add(memberId);
+                              } else {
+                                if (selectedMemberIds.length > 1) {
+                                  selectedMemberIds.remove(memberId);
+                                }
+                              }
+                            });
+                          },
+                        );
+                      }),
+                    ],
+                    // Placeholder members
+                    if (widget.placeholderMembers.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: Text("Placeholder Members", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                      ),
+                      ...widget.placeholderMembers.map((placeholder) => CheckboxListTile(
+                        dense: true,
+                        title: Row(
+                          children: [
+                            const Icon(Icons.person_outline, size: 20, color: Colors.grey),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                "👻 ${placeholder.displayName}",
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        value: selectedMemberIds.contains(placeholder.id),
+                        onChanged: (value) {
+                          setState(() {
+                            if (value == true) {
+                              selectedMemberIds.add(placeholder.id);
+                            } else {
+                              if (selectedMemberIds.length > 1) {
+                                selectedMemberIds.remove(placeholder.id);
+                              }
                             }
-                          }
-                        });
-                      },
-                    )),
+                          });
+                        },
+                      )),
+                    ],
                     // Quick actions
                     const Divider(height: 1),
                     Padding(
@@ -268,6 +319,9 @@ class _LocationPickerState extends State<LocationPicker> {
                                 selectedMemberIds = {widget.currentUserId};
                                 for (var p in widget.placeholderMembers) {
                                   selectedMemberIds.add(p.id);
+                                }
+                                for (var m in widget.groupMembers) {
+                                  selectedMemberIds.add(m['uid'] as String);
                                 }
                               });
                             },

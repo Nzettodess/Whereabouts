@@ -14,6 +14,13 @@ class _SettingsDialogState extends State<SettingsDialog> {
   List<String> _holidayCountries = [];
   List<String> _religiousCalendars = [];
   String _tileCalendarDisplay = 'none'; // none, chinese, islamic
+  
+  // Privacy settings - who can edit my data
+  bool _blockAllAdminEdits = false;
+  bool _blockDefaultLocation = false;
+  bool _blockLocationDate = false;  // Block location for certain date
+  bool _blockBirthday = false;
+  bool _blockLunarBirthday = false;
 
   final Map<String, String> _countryMap = {
     "US": "United States",
@@ -105,6 +112,16 @@ class _SettingsDialogState extends State<SettingsDialog> {
         } else {
           _tileCalendarDisplay = 'none';
         }
+        
+        // Load privacy settings
+        final privacy = data?['privacySettings'] as Map<String, dynamic>?;
+        if (privacy != null) {
+          _blockDefaultLocation = privacy['blockDefaultLocation'] ?? false;
+          _blockLocationDate = privacy['blockLocationDate'] ?? false;
+          _blockBirthday = privacy['blockBirthday'] ?? false;
+          _blockLunarBirthday = privacy['blockLunarBirthday'] ?? false;
+          _blockAllAdminEdits = _blockDefaultLocation && _blockLocationDate && _blockBirthday && _blockLunarBirthday;
+        }
       });
     }
   }
@@ -114,6 +131,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
       'additionalHolidayCountry': _holidayCountries.isNotEmpty ? _holidayCountries[0] : null,
       'religiousCalendars': _religiousCalendars,
       'tileCalendarDisplay': _tileCalendarDisplay,
+      'privacySettings': {
+        'blockDefaultLocation': _blockDefaultLocation,
+        'blockLocationDate': _blockLocationDate,
+        'blockBirthday': _blockBirthday,
+        'blockLunarBirthday': _blockLunarBirthday,
+      },
     });
     
     if (mounted) {
@@ -300,7 +323,82 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           });
                         },
                       );
-                    }).toList(),
+                    }),
+
+                    const SizedBox(height: 20),
+                    
+                    // Privacy Settings Section
+                    const Text("Privacy Settings", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 5),
+                    const Text("Control what group admins/owners can edit on your behalf:"),
+                    const SizedBox(height: 10),
+                    
+                    // Select All toggle
+                    CheckboxListTile(
+                      title: const Text("Block All Admin Edits", style: TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: const Text("Prevent admins/owners from editing any of your data"),
+                      value: _blockAllAdminEdits,
+                      onChanged: (bool? value) {
+                        setState(() {
+                          _blockAllAdminEdits = value ?? false;
+                          _blockDefaultLocation = value ?? false;
+                          _blockLocationDate = value ?? false;
+                          _blockBirthday = value ?? false;
+                          _blockLunarBirthday = value ?? false;
+                        });
+                      },
+                    ),
+                    
+                    const Divider(),
+                    
+                    // Per-field toggles
+                    CheckboxListTile(
+                      title: const Text("Block Default Location"),
+                      subtitle: const Text("Prevent editing your default location in profile"),
+                      value: _blockDefaultLocation,
+                      onChanged: (bool? value) {
+                        setState(() {
+                          _blockDefaultLocation = value ?? false;
+                          _blockAllAdminEdits = _blockDefaultLocation && _blockLocationDate && _blockBirthday && _blockLunarBirthday;
+                        });
+                      },
+                    ),
+                    
+                    CheckboxListTile(
+                      title: const Text("Block Location for Date"),
+                      subtitle: const Text("Prevent setting your location for specific dates"),
+                      value: _blockLocationDate,
+                      onChanged: (bool? value) {
+                        setState(() {
+                          _blockLocationDate = value ?? false;
+                          _blockAllAdminEdits = _blockDefaultLocation && _blockLocationDate && _blockBirthday && _blockLunarBirthday;
+                        });
+                      },
+                    ),
+                    
+                    CheckboxListTile(
+                      title: const Text("Block Birthday"),
+                      subtitle: const Text("Prevent editing your birthday"),
+                      value: _blockBirthday,
+                      onChanged: (bool? value) {
+                        setState(() {
+                          _blockBirthday = value ?? false;
+                          _blockAllAdminEdits = _blockDefaultLocation && _blockLocationDate && _blockBirthday && _blockLunarBirthday;
+                        });
+                      },
+                    ),
+                    
+                    CheckboxListTile(
+                      title: const Text("Block Lunar Birthday"),
+                      subtitle: const Text("Prevent editing your lunar birthday"),
+                      value: _blockLunarBirthday,
+                      onChanged: (bool? value) {
+                        setState(() {
+                          _blockLunarBirthday = value ?? false;
+                          _blockAllAdminEdits = _blockDefaultLocation && _blockLocationDate && _blockBirthday && _blockLunarBirthday;
+                        });
+                      },
+                    ),
 
                     const SizedBox(height: 30),
                     SizedBox(

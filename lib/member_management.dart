@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'models.dart';
 import 'firestore_service.dart';
+import 'edit_member_dialog.dart';
 
 class MemberManagement extends StatefulWidget {
   final Group group;
@@ -50,6 +51,136 @@ class _MemberManagementState extends State<MemberManagement> {
   }
 
   bool get isOwner => _group.ownerId == widget.currentUserId;
+  bool get isAdmin => _group.admins.contains(widget.currentUserId);
+  bool get canManage => isOwner || isAdmin;
+
+  Widget? _buildTrailingActions(String memberId, bool isThisOwner, bool isThisAdmin, bool isCurrentUser) {
+    // Can't edit yourself
+    if (isCurrentUser) return null;
+    
+    // Determine hierarchy: Owner > Admin > Member
+    // canEditThis = true if current user has higher rank than target
+    bool canEditThis = false;
+    
+    if (isOwner) {
+      // Owner can edit everyone except themselves
+      canEditThis = !isThisOwner;
+    } else if (isAdmin) {
+      // Admin can only edit Members (not Owner, not other Admins)
+      canEditThis = !isThisOwner && !isThisAdmin;
+    } else {
+      // Regular member can't edit anyone
+      canEditThis = false;
+    }
+    
+    // Members see greyed out icon for higher roles
+    if (!canManage) {
+      // Show greyed out icon to indicate they can view but not manage
+      return const Icon(Icons.more_vert, color: Colors.grey);
+    }
+    
+    // If user can't edit this target (e.g., admin looking at another admin)
+    if (!canEditThis) {
+      // Show greyed out icon
+      return const Icon(Icons.more_vert, color: Colors.grey);
+    }
+    
+    return PopupMenuButton<String>(
+      onSelected: (value) {
+        switch (value) {
+          case 'edit':
+            _showEditMemberDialog(memberId);
+            break;
+          case 'promote':
+            _promoteToAdmin(memberId);
+            break;
+          case 'demote':
+            _demoteAdmin(memberId);
+            break;
+          case 'remove':
+            _removeMember(memberId);
+            break;
+          case 'transfer':
+            _transferOwnership(memberId);
+            break;
+        }
+      },
+      itemBuilder: (_) => [
+        // Edit Details - can edit if hierarchy allows
+        const PopupMenuItem(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.edit, color: Colors.teal),
+              SizedBox(width: 8),
+              Text('Edit Details'),
+            ],
+          ),
+        ),
+        // Promote - only show for non-admins
+        if (!isThisAdmin)
+          const PopupMenuItem(
+            value: 'promote',
+            child: Row(
+              children: [
+                Icon(Icons.arrow_upward, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('Promote to Admin'),
+              ],
+            ),
+          ),
+        // Demote - only show for admins (Owner only can demote)
+        if (isThisAdmin && !isThisOwner && isOwner)
+          const PopupMenuItem(
+            value: 'demote',
+            child: Row(
+              children: [
+                Icon(Icons.arrow_downward, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('Remove Admin'),
+              ],
+            ),
+          ),
+        // Remove from group
+        const PopupMenuItem(
+          value: 'remove',
+          child: Row(
+            children: [
+              Icon(Icons.person_remove, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Remove from Group'),
+            ],
+          ),
+        ),
+        // Transfer - only owner can transfer
+        if (isOwner)
+          const PopupMenuItem(
+            value: 'transfer',
+            child: Row(
+              children: [
+                Icon(Icons.swap_horiz, color: Colors.purple),
+                SizedBox(width: 8),
+                Text('Transfer Ownership'),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _showEditMemberDialog(String memberId) {
+    showDialog(
+      context: context,
+      builder: (_) => EditMemberDialog(
+        memberId: memberId,
+        memberDetails: _memberDetails[memberId] ?? {},
+        groupId: _group.id,
+        onSaved: () {
+          _loadMemberDetails();
+        },
+      ),
+    );
+  }
 
   Future<void> _promoteToAdmin(String memberId) async {
     final confirm = await showDialog<bool>(
@@ -292,72 +423,7 @@ class _MemberManagementState extends State<MemberManagement> {
                         ),
                       ],
                     ),
-                    trailing: isOwner && !isCurrentUser
-                      ? PopupMenuButton<String>(
-                          onSelected: (value) {
-                            switch (value) {
-                              case 'promote':
-                                _promoteToAdmin(memberId);
-                                break;
-                              case 'demote':
-                                _demoteAdmin(memberId);
-                                break;
-                              case 'remove':
-                                _removeMember(memberId);
-                                break;
-                              case 'transfer':
-                                _transferOwnership(memberId);
-                                break;
-                            }
-                          },
-                          itemBuilder: (_) => [
-                            if (!isThisAdmin)
-                              const PopupMenuItem(
-                                value: 'promote',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.arrow_upward, color: Colors.blue),
-                                    SizedBox(width: 8),
-                                    Text('Promote to Admin'),
-                                  ],
-                                ),
-                              ),
-                            if (isThisAdmin && !isThisOwner)
-                              const PopupMenuItem(
-                                value: 'demote',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.arrow_downward, color: Colors.orange),
-                                    SizedBox(width: 8),
-                                    Text('Remove Admin'),
-                                  ],
-                                ),
-                              ),
-                            if (!isThisOwner)
-                              const PopupMenuItem(
-                                value: 'remove',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.person_remove, color: Colors.red),
-                                    SizedBox(width: 8),
-                                    Text('Remove from Group'),
-                                  ],
-                                ),
-                              ),
-                            if (!isThisOwner)
-                              const PopupMenuItem(
-                                value: 'transfer',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.swap_horiz, color: Colors.purple),
-                                    SizedBox(width: 8),
-                                    Text('Transfer Ownership'),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        )
-                      : null,
+                    trailing: _buildTrailingActions(memberId, isThisOwner, isThisAdmin, isCurrentUser),
                   );
                 },
               ),
