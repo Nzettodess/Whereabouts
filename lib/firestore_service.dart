@@ -276,8 +276,46 @@ class FirestoreService {
     }
   }
 
-  Future<void> updateEvent(GroupEvent event) async {
-    await _db.collection('events').doc(event.id).update(event.toMap());
+  /// Update event with rolling version history (keeps 2 previous versions)
+  Future<void> updateEvent(GroupEvent event, String editedByUserId) async {
+    // Get current event data before updating
+    final currentDoc = await _db.collection('events').doc(event.id).get();
+    
+    if (currentDoc.exists) {
+      final currentData = currentDoc.data()!;
+      
+      // Create history entry from current version (before edit)
+      // Note: Can't use FieldValue.serverTimestamp() inside arrays
+      final historyEntry = {
+        'title': currentData['title'],
+        'description': currentData['description'],
+        'venue': currentData['venue'],
+        'date': currentData['date'],
+        'editedBy': currentData['lastEditedBy'] ?? currentData['creatorId'],
+        'editedAt': currentData['lastEditedAt'] ?? Timestamp.now(),
+      };
+      
+      // Get existing history and add new entry (max 2 entries)
+      List<Map<String, dynamic>> history = [];
+      if (currentData['editHistory'] != null) {
+        history = List<Map<String, dynamic>>.from(currentData['editHistory']);
+      }
+      history.insert(0, historyEntry);
+      if (history.length > 2) {
+        history = history.sublist(0, 2); // Keep only 2 most recent
+      }
+      
+      // Update event with new data and version tracking
+      final updateData = event.toMap();
+      updateData['lastEditedBy'] = editedByUserId;
+      updateData['lastEditedAt'] = FieldValue.serverTimestamp();
+      updateData['editHistory'] = history;
+      
+      await _db.collection('events').doc(event.id).update(updateData);
+    } else {
+      // Event doesn't exist, just create it
+      await _db.collection('events').doc(event.id).set(event.toMap());
+    }
   }
 
   Future<void> deleteEvent(String eventId) async {
@@ -368,6 +406,19 @@ class FirestoreService {
       }
     }
     
+    // Also fetch placeholder members for this group
+    final placeholdersSnapshot = await _db
+        .collection('placeholder_members')
+        .where('groupId', isEqualTo: groupId)
+        .get();
+    for (final doc in placeholdersSnapshot.docs) {
+      final data = doc.data();
+      attendees[doc.id] = {
+        'displayName': data['displayName'] ?? 'Placeholder',
+        'isPlaceholder': true,
+      };
+    }
+    
     return attendees;
   }
 
@@ -399,8 +450,18 @@ class FirestoreService {
     }
     
     final group = Group.fromFirestore(groupDoc);
-    final totalMembers = group.members.length;
-    final noResponseUsers = event.getUsersWithNoResponse(group.members);
+    
+    // Also count placeholder members
+    final placeholdersSnapshot = await _db
+        .collection('placeholder_members')
+        .where('groupId', isEqualTo: groupId)
+        .get();
+    final placeholderIds = placeholdersSnapshot.docs.map((doc) => doc.id).toList();
+    
+    // Total = regular members + placeholders
+    final allMemberIds = [...group.members, ...placeholderIds];
+    final totalMembers = allMemberIds.length;
+    final noResponseUsers = event.getUsersWithNoResponse(allMemberIds);
     
     return {
       'totalMembers': totalMembers,

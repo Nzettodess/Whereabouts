@@ -178,6 +178,9 @@ class GroupEvent {
   final DateTime date;
   final bool hasTime;
   final Map<String, String> rsvps; // userId -> status ('Yes', 'No', 'Maybe')
+  final String? lastEditedBy; // userId of last editor
+  final DateTime? lastEditedAt; // Timestamp of last edit
+  final List<Map<String, dynamic>>? editHistory; // Max 2 previous versions
 
   GroupEvent({
     required this.id,
@@ -189,6 +192,9 @@ class GroupEvent {
     required this.date,
     this.hasTime = false,
     required this.rsvps,
+    this.lastEditedBy,
+    this.lastEditedAt,
+    this.editHistory,
   });
 
   factory GroupEvent.fromFirestore(DocumentSnapshot doc) {
@@ -203,11 +209,18 @@ class GroupEvent {
       date: (data['date'] as Timestamp).toDate(),
       hasTime: data['hasTime'] ?? false,
       rsvps: Map<String, String>.from(data['rsvps'] ?? {}),
+      lastEditedBy: data['lastEditedBy'],
+      lastEditedAt: data['lastEditedAt'] != null 
+          ? (data['lastEditedAt'] as Timestamp).toDate() 
+          : null,
+      editHistory: data['editHistory'] != null
+          ? List<Map<String, dynamic>>.from(data['editHistory'])
+          : null,
     );
   }
 
   Map<String, dynamic> toMap() {
-    return {
+    final map = <String, dynamic>{
       'groupId': groupId,
       'creatorId': creatorId,
       'title': title,
@@ -217,6 +230,12 @@ class GroupEvent {
       'hasTime': hasTime,
       'rsvps': rsvps,
     };
+    // Only include version history fields if they have values
+    // (updateEvent sets these directly, we don't want toMap to overwrite with nulls)
+    if (lastEditedBy != null) map['lastEditedBy'] = lastEditedBy;
+    if (lastEditedAt != null) map['lastEditedAt'] = Timestamp.fromDate(lastEditedAt!);
+    if (editHistory != null) map['editHistory'] = editHistory;
+    return map;
   }
 
   // RSVP Helper Methods

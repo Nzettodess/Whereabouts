@@ -94,7 +94,7 @@ class _AddEventModalState extends State<AddEventModal> {
           hasTime: _hasTime,
           rsvps: widget.eventToEdit!.rsvps,
         );
-        await _firestoreService.updateEvent(updatedEvent);
+        await _firestoreService.updateEvent(updatedEvent, widget.currentUserId);
       } else {
         // Create new event
         final event = GroupEvent(

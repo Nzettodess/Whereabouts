@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:grouped_list/grouped_list.dart';
 import 'package:intl/intl.dart';
 import 'models.dart';
+import 'models/placeholder_member.dart';
 import 'firestore_service.dart';
 import 'religious_calendar_helper.dart';
 import 'location_picker.dart';
@@ -38,6 +39,7 @@ class _DetailModalState extends State<DetailModal> {
   Map<String, String> _groupNames = {}; // Map groupId -> groupName
   List<String> _pinnedMembers = [];
   Set<String> _manageableMembers = {}; // Members the current user can edit (as admin/owner)
+  Set<String> _adminGroups = {}; // Groups where current user is owner or admin
 
   @override
   void initState() {
@@ -130,8 +132,20 @@ class _DetailModalState extends State<DetailModal> {
       // Remove current user from manageable set (can't manage yourself via this)
       manageableMembers.remove(widget.currentUserId);
       
+      // Track which groups user is admin of
+      final adminGroups = <String>{};
+      for (final doc in groupsSnapshot.docs) {
+        final data = doc.data();
+        final ownerId = data['ownerId'] as String?;
+        final admins = List<String>.from(data['admins'] ?? []);
+        if (ownerId == widget.currentUserId || admins.contains(widget.currentUserId)) {
+          adminGroups.add(doc.id);
+        }
+      }
+      
       setState(() {
         _manageableMembers = manageableMembers;
+        _adminGroups = adminGroups;
       });
     } catch (e) {
       print('Error loading manageable members: $e');
@@ -366,16 +380,21 @@ class _DetailModalState extends State<DetailModal> {
                final isOwner = e.creatorId == widget.currentUserId;
                return ListTile(
                  leading: const Icon(Icons.event, color: Colors.blue),
-                 title: Text("${e.title} (${e.hasTime ? DateFormat('yyyy-MM-dd HH:mm').format(e.date) : DateFormat('yyyy-MM-dd').format(e.date)})"),
+                 title: Text(
+                   "${e.title} (${e.hasTime ? DateFormat('yyyy-MM-dd HH:mm').format(e.date) : DateFormat('yyyy-MM-dd').format(e.date)})",
+                   maxLines: 1,
+                   overflow: TextOverflow.ellipsis,
+                   style: const TextStyle(fontWeight: FontWeight.bold),
+                 ),
                  subtitle: Column(
                    crossAxisAlignment: CrossAxisAlignment.start,
                    children: [
                      if (e.description.isNotEmpty)
                        Text(
                          e.description,
-                         softWrap: true,
                          maxLines: 3,
                          overflow: TextOverflow.ellipsis,
+                         style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                        ),
                      if (e.venue != null && e.venue!.isNotEmpty)
                        Row(
@@ -386,6 +405,7 @@ class _DetailModalState extends State<DetailModal> {
                              child: Text(
                                e.venue!,
                                style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.grey),
+                               maxLines: 1,
                                overflow: TextOverflow.ellipsis,
                              ),
                            ),
@@ -406,30 +426,40 @@ class _DetailModalState extends State<DetailModal> {
                  trailing: Row(
                    mainAxisSize: MainAxisSize.min,
                    children: [
-                     if (isOwner) ...[
-                       IconButton(
-                         icon: const Icon(Icons.edit, color: Colors.blue),
-                         onPressed: () {
-                           Navigator.pop(context);
-                           showModalBottomSheet(
-                             context: context,
-                             isScrollControlled: true,
-                             builder: (context) => AddEventModal(
-                               currentUserId: widget.currentUserId,
-                               initialDate: e.date,
-                               eventToEdit: e,
-                             ),
-                           );
-                         },
-                       ),
-                       IconButton(
-                         icon: const Icon(Icons.delete, color: Colors.red),
-                         onPressed: () async {
-                           await _firestoreService.deleteEvent(e.id);
-                           if (mounted) Navigator.pop(context);
-                         },
-                       ),
-                     ],
+                     // Edit button - all members can edit
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        tooltip: 'Edit Event',
+                        onPressed: () {
+                          Navigator.pop(context);
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            builder: (context) => AddEventModal(
+                              currentUserId: widget.currentUserId,
+                              initialDate: e.date,
+                              eventToEdit: e,
+                            ),
+                          );
+                        },
+                      ),
+                      // History button - shows if has edit history
+                      if (e.editHistory != null && e.editHistory!.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.history, color: Colors.orange),
+                          tooltip: 'View History (${e.editHistory!.length})',
+                          onPressed: () => _showVersionHistoryDialog(e),
+                        ),
+                      // Delete button - only owner or admin
+                      if (isOwner || _adminGroups.contains(e.groupId))
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          tooltip: 'Delete Event',
+                          onPressed: () async {
+                            await _firestoreService.deleteEvent(e.id);
+                            if (mounted) Navigator.pop(context);
+                          },
+                        ),
                      IconButton(
                         icon: const Icon(Icons.bar_chart, color: Colors.deepPurple),
                         tooltip: 'RSVP Stats',
@@ -693,35 +723,366 @@ class _DetailModalState extends State<DetailModal> {
   }
 
   void _showRSVPDialog(GroupEvent event) {
+    final isAdmin = _adminGroups.contains(event.groupId);
+    
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text("RSVP for ${event.title}"),
-        content: const Text("Are you going?"),
-        actions: [
-          TextButton(
-            onPressed: () {
-              _firestoreService.rsvpEvent(event.id, widget.currentUserId, 'No');
-              Navigator.pop(context);
-            },
-            child: const Text("No"),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(
+            event.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          TextButton(
-            onPressed: () {
-              _firestoreService.rsvpEvent(event.id, widget.currentUserId, 'Maybe');
-              Navigator.pop(context);
-            },
-            child: const Text("Maybe"),
+          content: SizedBox(
+            width: 400,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Current user's RSVP
+                  const Text("Your Response:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildRSVPChip(event, widget.currentUserId, 'No', Colors.red, dialogContext, setDialogState),
+                      _buildRSVPChip(event, widget.currentUserId, 'Maybe', Colors.orange, dialogContext, setDialogState),
+                      _buildRSVPChip(event, widget.currentUserId, 'Yes', Colors.green, dialogContext, setDialogState),
+                    ],
+                  ),
+                  
+                  // Admin section for setting others' RSVPs
+                  if (isAdmin) ...[
+                    const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    const Text("Set RSVP for Others:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 12),
+                    FutureBuilder<List<dynamic>>(
+                      future: _loadMembersAndPlaceholders(event.groupId),
+                      builder: (ctx, snapshot) {
+                        if (!snapshot.hasData) {
+                          return const Center(child: Padding(
+                            padding: EdgeInsets.all(16),
+                            child: CircularProgressIndicator(),
+                          ));
+                        }
+                        final members = snapshot.data![0] as List<Map<String, dynamic>>;
+                        final placeholders = snapshot.data![1] as List<PlaceholderMember>;
+                        
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Regular members (excluding current user)
+                            if (members.where((m) => m['uid'] != widget.currentUserId).isNotEmpty) ...[
+                              Text("Members:", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                              const SizedBox(height: 4),
+                              ...members.where((m) => m['uid'] != widget.currentUserId).map((member) {
+                                final userId = member['uid'] as String;
+                                final name = member['displayName'] ?? member['email'] ?? 'Unknown';
+                                return _buildMemberRSVPRow(
+                                  event, userId, name, 
+                                  event.rsvps[userId] ?? 'No Response',
+                                  Icons.person, dialogContext, setDialogState,
+                                );
+                              }),
+                            ],
+                            // Placeholder members
+                            if (placeholders.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Text("Placeholder Members:", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                              const SizedBox(height: 4),
+                              ...placeholders.map((placeholder) {
+                                return _buildMemberRSVPRow(
+                                  event, placeholder.id, placeholder.displayName,
+                                  event.rsvps[placeholder.id] ?? 'No Response',
+                                  Icons.person_outline, dialogContext, setDialogState,
+                                );
+                              }),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
-          ElevatedButton(
-            onPressed: () {
-              _firestoreService.rsvpEvent(event.id, widget.currentUserId, 'Yes');
-              Navigator.pop(context);
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text("Close"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRSVPChip(GroupEvent event, String userId, String status, Color color, BuildContext dialogContext, StateSetter setDialogState) {
+    final currentStatus = event.rsvps[userId];
+    final isSelected = currentStatus == status;
+    return ChoiceChip(
+      label: Text(status),
+      selected: isSelected,
+      selectedColor: color.withOpacity(0.3),
+      onSelected: (_) {
+        _firestoreService.rsvpEvent(event.id, userId, status);
+        // Update local state so UI reflects change
+        setDialogState(() {
+          event.rsvps[userId] = status;
+        });
+        Navigator.pop(dialogContext);
+      },
+    );
+  }
+
+  Widget _buildMemberRSVPRow(
+    GroupEvent event, String memberId, String name, String currentRsvp,
+    IconData icon, BuildContext dialogContext, StateSetter setDialogState,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: Colors.grey[600]),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(name, overflow: TextOverflow.ellipsis, maxLines: 1),
+          ),
+          PopupMenuButton<String>(
+            initialValue: currentRsvp == 'No Response' ? null : currentRsvp,
+            child: Chip(
+              label: Text(currentRsvp, style: const TextStyle(fontSize: 11)),
+              backgroundColor: currentRsvp == 'Yes' ? Colors.green[100] 
+                  : currentRsvp == 'No' ? Colors.red[100] 
+                  : currentRsvp == 'Maybe' ? Colors.orange[100] 
+                  : Colors.grey[200],
+              visualDensity: VisualDensity.compact,
+            ),
+            onSelected: (status) {
+              _firestoreService.rsvpEvent(event.id, memberId, status);
+              // Update UI
+              setDialogState(() {
+                event.rsvps[memberId] = status;
+              });
             },
-            child: const Text("Yes"),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'Yes', child: Text('✓ Yes')),
+              const PopupMenuItem(value: 'Maybe', child: Text('? Maybe')),
+              const PopupMenuItem(value: 'No', child: Text('✗ No')),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  Future<List<dynamic>> _loadMembersAndPlaceholders(String groupId) async {
+    // Load group members
+    final groupDoc = await FirebaseFirestore.instance.collection('groups').doc(groupId).get();
+    final memberIds = List<String>.from(groupDoc.data()?['members'] ?? []);
+    
+    final members = <Map<String, dynamic>>[];
+    for (final memberId in memberIds) {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(memberId).get();
+      if (userDoc.exists) {
+        final data = Map<String, dynamic>.from(userDoc.data()!);
+        data['uid'] = memberId;
+        members.add(data);
+      }
+    }
+    
+    // Load placeholder members
+    final placeholdersSnapshot = await FirebaseFirestore.instance
+        .collection('placeholder_members')
+        .where('groupId', isEqualTo: groupId)
+        .get();
+    final placeholders = placeholdersSnapshot.docs
+        .map((doc) => PlaceholderMember.fromFirestore(doc))
+        .toList();
+    
+    return [members, placeholders];
+  }
+
+  void _showVersionHistoryDialog(GroupEvent event) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.history, color: Colors.orange),
+            const SizedBox(width: 8),
+            const Text("Version History"),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Current version
+                Card(
+                  color: Colors.blue[50],
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(event.title, 
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 4),
+                        Text(event.description, 
+                          maxLines: 3, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13)),
+                        if (event.venue != null && event.venue!.isNotEmpty)
+                          Text("📍 ${event.venue!}", 
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        const SizedBox(height: 8),
+                        // Show editor name
+                        FutureBuilder<String>(
+                          future: _getEditorName(event.lastEditedBy ?? event.creatorId),
+                          builder: (ctx, snap) {
+                            final editorName = snap.data ?? 'Unknown';
+                            return Text(
+                              "Current • by $editorName • ${event.lastEditedAt != null ? _formatTimestamp(event.lastEditedAt!) : 'Just now'}",
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text("Previous Versions:", style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                // Previous versions
+                ...event.editHistory!.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final version = entry.value;
+                  final title = version['title'] ?? 'No title';
+                  final desc = version['description'] ?? '';
+                  final venue = version['venue'];
+                  final editedBy = version['editedBy'];
+                  final editedAt = version['editedAt'];
+                  final editedAtStr = editedAt != null 
+                      ? _formatTimestamp((editedAt as Timestamp).toDate())
+                      : 'Unknown';
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(title, 
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                                const SizedBox(height: 4),
+                                Text(desc, maxLines: 3, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 13)),
+                                if (venue != null && venue.isNotEmpty)
+                                  Text("📍 $venue", 
+                                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                const SizedBox(height: 8),
+                                FutureBuilder<String>(
+                                  future: _getEditorName(editedBy),
+                                  builder: (ctx, snap) {
+                                    final editorName = snap.data ?? 'Unknown';
+                                    return Text(
+                                      "V${event.editHistory!.length - idx} • by $editorName • $editedAtStr",
+                                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _revertToVersion(event, version, dialogContext),
+                            child: const Text("Revert"),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text("Close"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTimestamp(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 60) return "${diff.inMinutes}m ago";
+    if (diff.inHours < 24) return "${diff.inHours}h ago";
+    return "${diff.inDays}d ago";
+  }
+
+  Future<String> _getEditorName(String? userId) async {
+    if (userId == null) return 'Unknown';
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      if (doc.exists) {
+        return doc.data()?['displayName'] ?? doc.data()?['email'] ?? 'Unknown';
+      }
+    } catch (_) {}
+    return 'Unknown';
+  }
+
+  Future<void> _revertToVersion(GroupEvent event, Map<String, dynamic> version, BuildContext dialogContext) async {
+    final confirm = await showDialog<bool>(
+      context: dialogContext,
+      builder: (_) => AlertDialog(
+        title: const Text("Revert to this version?"),
+        content: Text("This will restore the event to:\n\nTitle: ${version['title']}\nDescription: ${version['description']}"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text("Revert")),
+        ],
+      ),
+    );
+    
+    if (confirm == true) {
+      // Create reverted event
+      final revertedEvent = GroupEvent(
+        id: event.id,
+        groupId: event.groupId,
+        creatorId: event.creatorId,
+        title: version['title'] ?? event.title,
+        description: version['description'] ?? event.description,
+        venue: version['venue'],
+        date: version['date'] != null ? (version['date'] as Timestamp).toDate() : event.date,
+        hasTime: event.hasTime,
+        rsvps: event.rsvps,
+      );
+      await _firestoreService.updateEvent(revertedEvent, widget.currentUserId);
+      if (mounted) {
+        Navigator.pop(dialogContext);
+        Navigator.pop(context); // Close detail modal to refresh
+      }
+    }
   }
 }

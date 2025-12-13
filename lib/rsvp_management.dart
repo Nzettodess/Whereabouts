@@ -40,7 +40,7 @@ class _RSVPManagementDialogState extends State<RSVPManagementDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    'RSVP Management',
+                    'RSVP',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   IconButton(
@@ -99,12 +99,14 @@ class _RSVPManagementDialogState extends State<RSVPManagementDialog> {
 
                   final allEvents = snapshot.data!;
                   final now = DateTime.now();
+                  final startOfToday = DateTime(now.year, now.month, now.day);
                   final filteredEvents = allEvents.where((event) {
                     switch (_currentFilter) {
                       case EventFilter.upcoming:
-                        return event.date.isAfter(now);
+                        // Include today and future events
+                        return !event.date.isBefore(startOfToday);
                       case EventFilter.past:
-                        return event.date.isBefore(now);
+                        return event.date.isBefore(startOfToday);
                       case EventFilter.all:
                         return true;
                     }
@@ -248,6 +250,8 @@ class _EventCardState extends State<EventCard> {
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
                                 Row(
