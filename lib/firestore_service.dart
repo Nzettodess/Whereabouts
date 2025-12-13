@@ -95,11 +95,58 @@ class FirestoreService {
       }
     }
 
+    // Clean up user's data from this group (RSVPs, locations)
+    await cleanupUserFromGroup(userId, groupId);
+
     await docRef.update({
       'members': updatedMembers,
       'admins': updatedAdmins,
       'ownerId': updatedOwnerId,
     });
+  }
+
+  /// Clean up all user data from a group when they leave/are removed
+  Future<void> cleanupUserFromGroup(String userId, String groupId) async {
+    // Get group details for ownership transfer
+    final groupDoc = await _db.collection('groups').doc(groupId).get();
+    final groupOwnerId = groupDoc.data()?['ownerId'] as String?;
+    
+    // 1. Handle events: remove RSVP and transfer ownership if needed
+    final eventsSnapshot = await _db.collection('events')
+        .where('groupId', isEqualTo: groupId)
+        .get();
+    
+    for (final eventDoc in eventsSnapshot.docs) {
+      final data = eventDoc.data();
+      final creatorId = data['creatorId'] as String?;
+      final rsvps = data['rsvps'] as Map<String, dynamic>?;
+      
+      final updates = <String, dynamic>{};
+      
+      // Remove user's RSVP
+      if (rsvps != null && rsvps.containsKey(userId)) {
+        updates['rsvps.$userId'] = FieldValue.delete();
+      }
+      
+      // Transfer event ownership to group owner if user was event creator
+      if (creatorId == userId && groupOwnerId != null) {
+        updates['creatorId'] = groupOwnerId;
+      }
+      
+      if (updates.isNotEmpty) {
+        await eventDoc.reference.update(updates);
+      }
+    }
+    
+    // 2. Delete user's location records for this group
+    final locationsSnapshot = await _db.collection('user_locations')
+        .where('userId', isEqualTo: userId)
+        .where('groupId', isEqualTo: groupId)
+        .get();
+    
+    for (final locationDoc in locationsSnapshot.docs) {
+      await locationDoc.reference.delete();
+    }
   }
 
   Stream<List<Group>> getUserGroups(String userId) {

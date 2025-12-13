@@ -128,25 +128,42 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
     
     // Cancel existing subscriptions before creating new ones
     _cancelAllSubscriptions();
-    
-    // Listen to events (global - not filtered by groups)
-    _eventsSubscription = FirebaseFirestore.instance.collection('events').snapshots().listen((snapshot) {
-      setState(() {
-        _events = snapshot.docs.map((doc) => GroupEvent.fromFirestore(doc)).toList();
-      });
-    });
 
-    // Get current user's groups to filter locations and users
+    // Get current user's groups to filter locations, users, and events
     _groupsSubscription = _firestoreService.getUserGroups(_user!.uid).listen((userGroups) {
       // Cancel previous data subscriptions when groups change
       _cancelDataSubscriptions();
       
-      final myGroupIds = userGroups.map((g) => g.id).toSet();
+      final myGroupIds = userGroups.map((g) => g.id).toList();
       
       // Build a set of all member IDs across all my groups (for filtering)
       final myGroupMemberIds = <String>{};
       for (final group in userGroups) {
         myGroupMemberIds.addAll(group.members);
+      }
+      
+      // Listen to events - filter by user's groups
+      // Firestore 'whereIn' is limited to 10 items, so batch if needed
+      if (myGroupIds.isNotEmpty) {
+        _eventsSubscription?.cancel();
+        if (myGroupIds.length <= 10) {
+          _eventsSubscription = FirebaseFirestore.instance
+              .collection('events')
+              .where('groupId', whereIn: myGroupIds)
+              .snapshots()
+              .listen((snapshot) {
+            setState(() {
+              _events = snapshot.docs.map((doc) => GroupEvent.fromFirestore(doc)).toList();
+            });
+          });
+        } else {
+          // For more than 10 groups, query in batches and merge
+          _loadEventsBatched(myGroupIds);
+        }
+      } else {
+        setState(() {
+          _events = [];
+        });
       }
       
       // Listen to user_locations - filter to only my group members
@@ -385,6 +402,28 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
         }
       }
     });
+  }
+
+  // Load events in batches when user is in more than 10 groups
+  void _loadEventsBatched(List<String> groupIds) async {
+    const batchSize = 10;
+    final allEvents = <GroupEvent>[];
+    
+    for (var i = 0; i < groupIds.length; i += batchSize) {
+      final batch = groupIds.skip(i).take(batchSize).toList();
+      final snapshot = await FirebaseFirestore.instance
+          .collection('events')
+          .where('groupId', whereIn: batch)
+          .get();
+      
+      allEvents.addAll(snapshot.docs.map((doc) => GroupEvent.fromFirestore(doc)));
+    }
+    
+    if (mounted) {
+      setState(() {
+        _events = allEvents;
+      });
+    }
   }
 
   void _fetchHolidays(List<String> calendarIds) {

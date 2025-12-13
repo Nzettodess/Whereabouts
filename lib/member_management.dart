@@ -306,6 +306,10 @@ class _MemberManagementState extends State<MemberManagement> {
     );
     if (confirm2 != true) return;
 
+    // Clean up user's data from this group (RSVPs, locations)
+    final firestoreService = FirestoreService();
+    await firestoreService.cleanupUserFromGroup(memberId, _group.id);
+
     // Remove from members and admins
     await FirebaseFirestore.instance.collection('groups').doc(_group.id).update({
       'members': FieldValue.arrayRemove([memberId]),

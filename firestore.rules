@@ -165,8 +165,8 @@ service cloud.firestore {
     // 6. EVENTS COLLECTION
     // ============================================
     match /events/{eventId} {
-      // Any authenticated user can read (filtering done at app level)
-      allow read: if isAuthenticated();
+      // Only group members can read events (prevents data leak if user leaves group)
+      allow read: if isAuthenticated() && isGroupMember(resource.data.groupId);
       
       // Any group member can create (creator becomes event owner)
       allow create: if isAuthenticated() && 
