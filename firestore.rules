@@ -93,10 +93,14 @@ service cloud.firestore {
         // Any user can join (add themselves to members)
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']) &&
          userId() in request.resource.data.members &&
-         !(userId() in resource.data.members))
+         !(userId() in resource.data.members)) ||
+        // Any member can LEAVE (remove themselves from members and optionally admins)
+        (userId() in resource.data.members &&
+         !(userId() in request.resource.data.members) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'admins', 'ownerId']))
       );
       
-      // Only owner can delete
+      // Only owner can delete (or last member triggers deletion via app logic)
       allow delete: if isGroupOwner(groupId);
     }
     

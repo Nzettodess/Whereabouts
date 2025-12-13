@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -43,6 +44,15 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
   List<Map<String, dynamic>> _allUsers = [];
   List<PlaceholderMember> _placeholderMembers = [];
   final CalendarController _calendarController = CalendarController();
+  
+  // Subscription management to prevent stale data
+  StreamSubscription? _groupsSubscription;
+  StreamSubscription? _locationsSubscription;
+  StreamSubscription? _placeholderLocationsSubscription;
+  StreamSubscription? _usersSubscription;
+  StreamSubscription? _placeholderMembersSubscription;
+  StreamSubscription? _eventsSubscription;
+  StreamSubscription? _settingsSubscription;
 
   @override
   void initState() {
@@ -59,7 +69,8 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
         _loadUserProfile();
         _loadData();
       } else {
-        // User logged out - clear data
+        // User logged out - clear data and cancel subscriptions
+        _cancelAllSubscriptions();
         setState(() {
           _photoUrl = null;
           _locations = [];
@@ -69,6 +80,30 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
         });
       }
     });
+  }
+  
+  @override
+  void dispose() {
+    _cancelAllSubscriptions();
+    super.dispose();
+  }
+  
+  void _cancelAllSubscriptions() {
+    _groupsSubscription?.cancel();
+    _locationsSubscription?.cancel();
+    _placeholderLocationsSubscription?.cancel();
+    _usersSubscription?.cancel();
+    _placeholderMembersSubscription?.cancel();
+    _eventsSubscription?.cancel();
+    _settingsSubscription?.cancel();
+  }
+  
+  void _cancelDataSubscriptions() {
+    // Cancel inner data subscriptions (not groups subscription)
+    _locationsSubscription?.cancel();
+    _placeholderLocationsSubscription?.cancel();
+    _usersSubscription?.cancel();
+    _placeholderMembersSubscription?.cancel();
   }
 
   void _handleLoginSuccess() async {
@@ -91,15 +126,21 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
   void _loadData() {
     if (_user == null) return;
     
+    // Cancel existing subscriptions before creating new ones
+    _cancelAllSubscriptions();
+    
     // Listen to events (global - not filtered by groups)
-    FirebaseFirestore.instance.collection('events').snapshots().listen((snapshot) {
+    _eventsSubscription = FirebaseFirestore.instance.collection('events').snapshots().listen((snapshot) {
       setState(() {
         _events = snapshot.docs.map((doc) => GroupEvent.fromFirestore(doc)).toList();
       });
     });
 
     // Get current user's groups to filter locations and users
-    _firestoreService.getUserGroups(_user!.uid).listen((userGroups) {
+    _groupsSubscription = _firestoreService.getUserGroups(_user!.uid).listen((userGroups) {
+      // Cancel previous data subscriptions when groups change
+      _cancelDataSubscriptions();
+      
       final myGroupIds = userGroups.map((g) => g.id).toSet();
       
       // Build a set of all member IDs across all my groups (for filtering)
@@ -109,14 +150,15 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
       }
       
       // Listen to user_locations - filter to only my group members
-      FirebaseFirestore.instance.collection('user_locations').snapshots().listen((userLocSnapshot) {
+      _locationsSubscription = FirebaseFirestore.instance.collection('user_locations').snapshots().listen((userLocSnapshot) {
         final userLocations = userLocSnapshot.docs
           .map((doc) => UserLocation.fromFirestore(doc.data()))
           .where((loc) => myGroupMemberIds.contains(loc.userId)) // Filter by group members
           .toList();
         
         // Also listen to placeholder_member_locations - filter to my groups
-        FirebaseFirestore.instance.collection('placeholder_member_locations').snapshots().listen((placeholderLocSnapshot) {
+        _placeholderLocationsSubscription?.cancel();
+        _placeholderLocationsSubscription = FirebaseFirestore.instance.collection('placeholder_member_locations').snapshots().listen((placeholderLocSnapshot) {
           final placeholderLocations = placeholderLocSnapshot.docs
             .map((doc) {
               final data = doc.data();
@@ -138,7 +180,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
       });
       
       // Listen to all users but filter to only those in my groups
-      FirebaseFirestore.instance.collection('users').snapshots().listen((snapshot) {
+      _usersSubscription = FirebaseFirestore.instance.collection('users').snapshots().listen((snapshot) {
         final allUsers = snapshot.docs.map((doc) => doc.data()..['uid'] = doc.id).toList();
         
         // Filter to only my group members and DEDUPLICATE by userId
@@ -167,7 +209,8 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
         }
         
         // Also listen to placeholder members (filter by my groups)
-        FirebaseFirestore.instance.collection('placeholder_members').snapshots().listen((placeholderSnapshot) {
+        _placeholderMembersSubscription?.cancel();
+        _placeholderMembersSubscription = FirebaseFirestore.instance.collection('placeholder_members').snapshots().listen((placeholderSnapshot) {
           final allPlaceholders = placeholderSnapshot.docs.map((doc) {
             final data = doc.data();
             return {
