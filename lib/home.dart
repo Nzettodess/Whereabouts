@@ -51,6 +51,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
   DateTime _currentViewMonth = DateTime.now();
   List<Map<String, dynamic>> _allUsers = [];
   List<PlaceholderMember> _placeholderMembers = [];
+  List<Group> _myGroups = [];
   final CalendarController _calendarController = CalendarController();
   
   // Subscription management to prevent stale data
@@ -142,6 +143,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
       // Cancel previous data subscriptions when groups change
       _cancelDataSubscriptions();
       
+      _myGroups = userGroups;
       final myGroupIds = userGroups.map((g) => g.id).toList();
       
       // Build a set of all member IDs across all my groups (for filtering)
@@ -552,6 +554,26 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
 
   void _openLocationPicker() async {
     if (_user == null) return;
+    
+    // Check if user has any groups or placeholders to manage
+    if (_myGroups.isEmpty && _placeholderMembers.isEmpty) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('No Groups'),
+            content: const Text('You need to belong to at least one group to set a location context.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
     
     // Fetch user's default location
     final doc = await FirebaseFirestore.instance.collection('users').doc(_user!.uid).get();

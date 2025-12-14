@@ -38,6 +38,14 @@ class _CreditsAndFeedbackDialogState extends State<CreditsAndFeedbackDialog> {
   }
 
   Future<void> _sendFeedback() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to send feedback')),
+      );
+      return;
+    }
+
     if (_feedbackController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter your feedback')),
