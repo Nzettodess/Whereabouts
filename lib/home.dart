@@ -21,6 +21,9 @@ import 'widgets/home_calendar.dart';
 import 'widgets/home_drawer.dart';
 import 'upcoming_summary_dialog.dart';
 import 'detail_modal.dart';
+import 'birthday_baby_dialog.dart';
+
+
 
 class HomeWithLogin extends StatefulWidget {
   const HomeWithLogin({super.key});
@@ -175,27 +178,38 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
           .where((loc) => myGroupMemberIds.contains(loc.userId)) // Filter by group members
           .toList();
         
-        // Also listen to placeholder_member_locations - filter to my groups
+        // Also listen to placeholder_member_locations - filter to my groups (max 10 for now due to Firestore limit)
         _placeholderLocationsSubscription?.cancel();
-        _placeholderLocationsSubscription = FirebaseFirestore.instance.collection('placeholder_member_locations').snapshots().listen((placeholderLocSnapshot) {
-          final placeholderLocations = placeholderLocSnapshot.docs
-            .map((doc) {
-              final data = doc.data();
-              return UserLocation(
-                userId: data['placeholderMemberId'] ?? '',
-                groupId: data['groupId'] ?? 'global',
-                date: (data['date'] as Timestamp).toDate(),
-                nation: data['nation'] ?? '',
-                state: data['state'],
-              );
-            })
-            .where((loc) => myGroupIds.contains(loc.groupId)) // Filter by my groups
-            .toList();
+        if (myGroupIds.isNotEmpty) {
+          // Take first 10 groups to comply with Firestore 'whereIn' limit
+          final groupBatch = myGroupIds.take(10).toList();
           
-          setState(() {
-            _locations = [...userLocations, ...placeholderLocations];
+          _placeholderLocationsSubscription = FirebaseFirestore.instance
+              .collection('placeholder_member_locations')
+              .where('groupId', whereIn: groupBatch)
+              .snapshots()
+              .listen((placeholderLocSnapshot) {
+            final placeholderLocations = placeholderLocSnapshot.docs
+              .map((doc) {
+                final data = doc.data();
+                return UserLocation(
+                  userId: data['placeholderMemberId'] ?? '',
+                  groupId: data['groupId'] ?? 'global',
+                  date: (data['date'] as Timestamp).toDate(),
+                  nation: data['nation'] ?? '',
+                  state: data['state'],
+                );
+              })
+              .toList(); // Already filtered by query
+            
+            setState(() {
+              // Remove old placeholder locations and add new ones
+              // Note: If we had multiple batches, we'd need more complex merging. 
+              // For now, this replaces all placeholder locations with the result of this query.
+              _locations = [...userLocations, ...placeholderLocations];
+            });
           });
-        });
+        }
       });
       
       // Listen to all users but filter to only those in my groups
@@ -227,40 +241,46 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
           }
         }
         
-        // Also listen to placeholder members (filter by my groups)
+        setState(() {
+          _allUsers = filteredUsersWithGroups;
+        }); // Update users state
+        
+        // Also listen to placeholder members (filter by my groups - max 10)
         _placeholderMembersSubscription?.cancel();
-        _placeholderMembersSubscription = FirebaseFirestore.instance.collection('placeholder_members').snapshots().listen((placeholderSnapshot) {
-          final allPlaceholders = placeholderSnapshot.docs.map((doc) {
-            final data = doc.data();
-            return {
-              'uid': doc.id,
-              'displayName': '👻 ${data['displayName'] ?? 'Placeholder'}',
-              'defaultLocation': data['defaultLocation'],
-              'birthday': data['birthday'],
-              'hasLunarBirthday': data['hasLunarBirthday'] ?? false,
-              'lunarBirthdayMonth': data['lunarBirthdayMonth'],
-              'lunarBirthdayDay': data['lunarBirthdayDay'],
-              'isPlaceholder': true,
-              'groupId': data['groupId'],
-            };
-          }).toList();
+        if (myGroupIds.isNotEmpty) {
+          final groupBatch = myGroupIds.take(10).toList();
           
-          // Filter placeholders to only those in my groups
-          final filteredPlaceholders = allPlaceholders.where((p) {
-            return myGroupIds.contains(p['groupId']);
-          }).toList();
-          
-          // Also populate placeholder members list for location picker
-          final placeholderMembersList = placeholderSnapshot.docs
-            .where((doc) => myGroupIds.contains(doc.data()['groupId']))
-            .map((doc) => PlaceholderMember.fromFirestore(doc))
-            .toList();
-          
-          setState(() {
-            _allUsers = [...filteredUsersWithGroups, ...filteredPlaceholders];
-            _placeholderMembers = placeholderMembersList;
+          _placeholderMembersSubscription = FirebaseFirestore.instance
+              .collection('placeholder_members')
+              .where('groupId', whereIn: groupBatch)
+              .snapshots()
+              .listen((placeholderSnapshot) {
+            final allPlaceholders = placeholderSnapshot.docs.map((doc) {
+              final data = doc.data();
+              return PlaceholderMember(
+                id: doc.id,
+                groupId: data['groupId'],
+                displayName: '👻 ${data['displayName'] ?? 'Placeholder'}',
+                createdBy: data['createdBy'] ?? '',
+                createdAt: (data['createdAt'] as Timestamp).toDate(),
+                defaultLocation: data['defaultLocation'],
+                birthday: data['birthday'] != null ? (data['birthday'] as Timestamp).toDate() : null,
+                hasLunarBirthday: data['hasLunarBirthday'] ?? false,
+                lunarBirthdayMonth: data['lunarBirthdayMonth'],
+                lunarBirthdayDay: data['lunarBirthdayDay'],
+              );
+            }).toList();
+            
+            setState(() {
+              _placeholderMembers = allPlaceholders;
+            });
           });
-        });
+        } else {
+             setState(() {
+              _placeholderMembers = [];
+            });
+        }
+
       });
     });
 
@@ -497,6 +517,23 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
     );
   }
 
+  void _openBirthdayBabyDialog() {
+    // Map group IDs to names for the dialog
+    final groupNames = <String, String>{};
+    // Need access to current groups, but they are in stream. 
+    // We can infer group names if needed or pass empty if not used for display.
+    
+    showDialog(
+      context: context,
+      builder: (context) => BirthdayBabyDialog(
+        currentUserId: _user!.uid,
+        allUsers: _allUsers,
+        placeholderMembers: _placeholderMembers,
+        groupNames: groupNames,
+      ),
+    );
+  }
+
   void _openLocationPicker() async {
     if (_user == null) return;
     
@@ -706,6 +743,12 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
               onPressed: _openUpcomingSummary,
             ),
             IconButton(
+              icon: const Icon(Icons.cake, color: Colors.pink),
+              tooltip: 'Birthday Baby',
+              onPressed: _openBirthdayBabyDialog,
+            ),
+
+            IconButton(
               icon: const Icon(Icons.notifications, color: Colors.black),
               onPressed: () {
                 showDialog(
@@ -765,6 +808,8 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
                 );
               },
               onUpcomingTap: _openUpcomingSummary,
+              onBirthdayBabyTap: _openBirthdayBabyDialog,
+
               onRSVPManagementTap: () {
                 showDialog(
                   context: context,

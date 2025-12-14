@@ -7,6 +7,7 @@ class HomeDrawer extends StatelessWidget {
   final VoidCallback onProfileTap;
   final VoidCallback onManageGroupsTap;
   final VoidCallback onUpcomingTap;
+  final VoidCallback onBirthdayBabyTap;
   final VoidCallback onRSVPManagementTap;
   final VoidCallback onSettingsTap;
 
@@ -17,6 +18,7 @@ class HomeDrawer extends StatelessWidget {
     required this.onProfileTap,
     required this.onManageGroupsTap,
     required this.onUpcomingTap,
+    required this.onBirthdayBabyTap,
     required this.onRSVPManagementTap,
     required this.onSettingsTap,
   });
@@ -83,6 +85,14 @@ class HomeDrawer extends StatelessWidget {
             },
           ),
           ListTile(
+            leading: const Icon(Icons.cake, color: Colors.pink),
+            title: const Text("Birthday Baby"),
+            onTap: () {
+              Navigator.pop(context);
+              onBirthdayBabyTap();
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.event_available),
             title: const Text("RSVP"),
             onTap: () {
@@ -102,4 +112,5 @@ class HomeDrawer extends StatelessWidget {
       ),
     );
   }
+
 }

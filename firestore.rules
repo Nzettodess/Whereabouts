@@ -139,9 +139,8 @@ service cloud.firestore {
     // 4. PLACEHOLDER_MEMBER_LOCATIONS COLLECTION
     // ============================================
     match /placeholder_member_locations/{locationId} {
-      // Read: authenticated users can read, app filters by group membership
-      // (Upcoming Summary only shows placeholder locations for user's groups)
-      allow read: if isAuthenticated();
+      // Read: Strictly limited to group members
+      allow read: if isAuthenticated() && isGroupMember(resource.data.groupId);
       
       // Only Owner or Admin can create/update/delete
       allow create, update: if isAuthenticated() && 
@@ -154,9 +153,8 @@ service cloud.firestore {
     // 5. PLACEHOLDER_MEMBERS COLLECTION
     // ============================================
     match /placeholder_members/{memberId} {
-      // Read: authenticated users can read, app filters by group membership
-      // (Upcoming Summary only shows placeholder birthdays for user's groups)
-      allow read: if isAuthenticated();
+      // Read: Strictly limited to group members
+      allow read: if isAuthenticated() && isGroupMember(resource.data.groupId);
       
       // Only Owner can create
       allow create: if isAuthenticated() && 
