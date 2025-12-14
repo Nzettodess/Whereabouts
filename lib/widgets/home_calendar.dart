@@ -3,6 +3,7 @@ import 'package:syncfusion_flutter_calendar/calendar.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models.dart';
+import '../models/placeholder_member.dart';
 import '../religious_calendar_helper.dart';
 import '../detail_modal.dart';
 
@@ -12,6 +13,7 @@ class HomeCalendar extends StatefulWidget {
   final List<GroupEvent> events;
   final List<Holiday> holidays;
   final List<Map<String, dynamic>> allUsers;
+  final List<PlaceholderMember> placeholderMembers;
   final String tileCalendarDisplay;
   final List<String> religiousCalendars;
   final Function(String, DateTime) onMonthChanged;
@@ -25,6 +27,7 @@ class HomeCalendar extends StatefulWidget {
     required this.events,
     required this.holidays,
     required this.allUsers,
+    required this.placeholderMembers,
     required this.tileCalendarDisplay,
     required this.religiousCalendars,
     required this.onMonthChanged,
@@ -80,6 +83,37 @@ class _HomeCalendarState extends State<HomeCalendar> {
         }
       }
     }
+    
+    // 3. Add placeholder members (with their default locations)
+    for (final placeholder in widget.placeholderMembers) {
+      if (!explicitUserIds.contains(placeholder.id)) {
+        final defaultLoc = placeholder.defaultLocation;
+        
+        if (defaultLoc != null && defaultLoc.isNotEmpty) {
+          // Has default location
+          final parts = defaultLoc.split(', ');
+          final country = parts[0];
+          final state = parts.length > 1 ? parts[1] : null;
+          
+          others.add(UserLocation(
+            userId: placeholder.id,
+            groupId: placeholder.groupId,
+            date: date,
+            nation: country,
+            state: state,
+          ));
+        } else {
+          // No location - add placeholder entry for detail modal
+          others.add(UserLocation(
+            userId: placeholder.id,
+            groupId: placeholder.groupId,
+            date: date,
+            nation: "No location selected",
+            state: null,
+          ));
+        }
+      }
+    }
 
     return [...explicit, ...others];
   }
@@ -106,6 +140,7 @@ class _HomeCalendarState extends State<HomeCalendar> {
   List<Birthday> _getBirthdaysForDate(DateTime date) {
     final birthdays = <Birthday>[];
     
+    // Regular users
     for (final user in widget.allUsers) {
       // Get solar birthday
       final solarBirthday = Birthday.getSolarBirthday(user, date.year);
@@ -121,6 +156,28 @@ class _HomeCalendarState extends State<HomeCalendar> {
       final lunarBirthday = Birthday.getLunarBirthday(user, date.year, date);
       if (lunarBirthday != null) {
         birthdays.add(lunarBirthday);
+      }
+    }
+    
+    // Placeholder members
+    for (final placeholder in widget.placeholderMembers) {
+      // Solar birthday
+      final solarBirthday = Birthday.fromPlaceholderMember(placeholder, date.year);
+      if (solarBirthday != null) {
+        if (solarBirthday.occurrenceDate.month == date.month && 
+            solarBirthday.occurrenceDate.day == date.day) {
+          birthdays.add(solarBirthday);
+        }
+      }
+      
+      // Lunar birthday
+      if (placeholder.hasLunarBirthday && 
+          placeholder.lunarBirthdayMonth != null && 
+          placeholder.lunarBirthdayDay != null) {
+        final lunarBirthday = Birthday.fromPlaceholderLunar(placeholder, date.year, date);
+        if (lunarBirthday != null) {
+          birthdays.add(lunarBirthday);
+        }
       }
     }
     

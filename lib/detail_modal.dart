@@ -205,7 +205,7 @@ class _DetailModalState extends State<DetailModal> {
             final data = doc.data() as Map<String, dynamic>;
             setState(() {
               _userDetails[uid] = {
-                'displayName': '👻 ${data['displayName'] ?? 'Placeholder'}',
+                'displayName': data['displayName'] ?? 'Placeholder',
                 'photoURL': null,
                 'isPlaceholder': true,
                 'groupId': data['groupId'],

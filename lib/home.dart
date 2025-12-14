@@ -262,7 +262,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
               return PlaceholderMember(
                 id: doc.id,
                 groupId: data['groupId'],
-                displayName: '👻 ${data['displayName'] ?? 'Placeholder'}',
+                displayName: data['displayName'] ?? 'Placeholder',
                 createdBy: data['createdBy'] ?? '',
                 createdAt: (data['createdAt'] as Timestamp).toDate(),
                 defaultLocation: data['defaultLocation'],
@@ -935,6 +935,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
                     events: _events,
                     holidays: _holidays,
                     allUsers: _allUsers,
+                    placeholderMembers: _placeholderMembers,
                     tileCalendarDisplay: _tileCalendarDisplay,
                     religiousCalendars: _religiousCalendars,
                     currentUserId: _user?.uid ?? '',
