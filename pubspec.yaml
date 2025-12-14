@@ -83,6 +83,9 @@ flutter:
     - assets/orbit_logo.png
     - assets/orbit_logo.svg
     - assets/google_logo.png
+    - assets/github.svg
+    - assets/linkedin.svg
+    - assets/mail.svg
     - .env
 
   # To add assets to your application, add an assets section, like this:
