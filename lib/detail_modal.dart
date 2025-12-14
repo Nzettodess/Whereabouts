@@ -43,14 +43,31 @@ class _DetailModalState extends State<DetailModal> {
   Set<String> _manageableMembers = {}; // Members the current user can edit (as admin/owner)
   Set<String> _adminGroups = {}; // Groups where current user is owner or admin
 
+  // Session-based expansion state memory PER DATE (static to persist across modal reopens)
+  // Key: "yyyy-MM-dd", Value: expansion state (default true if not set)
+  static final Map<String, bool> _birthdaysExpandedByDate = {};
+  static final Map<String, bool> _eventsExpandedByDate = {};
+
+  // Helper to get date key for state maps
+  String get _dateKey => '${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}';
+
+  // Get/set expansion state for this specific date
+  bool get _birthdaysExpanded => _birthdaysExpandedByDate[_dateKey] ?? true;
+  set _birthdaysExpanded(bool value) => _birthdaysExpandedByDate[_dateKey] = value;
+  
+  bool get _eventsExpanded => _eventsExpandedByDate[_dateKey] ?? true;
+  set _eventsExpanded(bool value) => _eventsExpandedByDate[_dateKey] = value;
+
   @override
   void initState() {
     super.initState();
     _loadUserDetails();
     _loadPinnedMembers();
+
     _loadGroupNames();
     _loadManageableMembers();
   }
+
 
   /// Deduplicates locations by userId - each user appears only once.
   /// Priority: explicit location > default location > "No location selected"
@@ -363,7 +380,8 @@ class _DetailModalState extends State<DetailModal> {
           if (widget.birthdays.isNotEmpty)
             ExpansionTile(
               title: const Text("Birthdays 🎂", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-              initiallyExpanded: false,
+              initiallyExpanded: _birthdaysExpanded,
+              onExpansionChanged: (expanded) => _birthdaysExpanded = expanded,
               shape: const Border(),
               collapsedShape: const Border(),
               tilePadding: EdgeInsets.zero,
@@ -376,6 +394,7 @@ class _DetailModalState extends State<DetailModal> {
                 subtitle: b.isLunar ? null : Text("Turning ${b.age} years old"),
               )).toList(),
             ),
+
           
 
 
@@ -383,7 +402,8 @@ class _DetailModalState extends State<DetailModal> {
           if (widget.events.isNotEmpty)
              ExpansionTile(
                title: const Text("Events", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
-               initiallyExpanded: false,
+               initiallyExpanded: _eventsExpanded,
+               onExpansionChanged: (expanded) => _eventsExpanded = expanded,
                shape: const Border(),
                collapsedShape: const Border(),
                tilePadding: EdgeInsets.zero,
@@ -442,6 +462,18 @@ class _DetailModalState extends State<DetailModal> {
                  subtitle: Column(
                    crossAxisAlignment: CrossAxisAlignment.start,
                    children: [
+                     // Time display - show if event has time
+                     if (e.hasTime)
+                       Row(
+                         children: [
+                           const Icon(Icons.access_time, size: 14, color: Colors.deepPurple),
+                           const SizedBox(width: 4),
+                           Text(
+                             DateFormat('h:mm a').format(e.date),
+                             style: const TextStyle(fontSize: 12, color: Colors.deepPurple, fontWeight: FontWeight.w500),
+                           ),
+                         ],
+                       ),
                      if (e.description.isNotEmpty)
                        Text(
                          e.description,
@@ -476,6 +508,7 @@ class _DetailModalState extends State<DetailModal> {
                      ),
                    ],
                  ),
+
                  trailing: Row(
                    mainAxisSize: MainAxisSize.min,
                    children: [

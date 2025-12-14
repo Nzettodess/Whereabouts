@@ -19,6 +19,8 @@ import 'settings.dart';
 import 'rsvp_management.dart';
 import 'widgets/home_calendar.dart';
 import 'widgets/home_drawer.dart';
+import 'upcoming_summary_dialog.dart';
+import 'detail_modal.dart';
 
 class HomeWithLogin extends StatefulWidget {
   const HomeWithLogin({super.key});
@@ -447,6 +449,52 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
     }
   }
 
+  void _openUpcomingSummary() async {
+    if (_user == null) return;
+    
+    // Build group names map
+    final groupNames = <String, String>{};
+    final groupsSnapshot = await _firestoreService.getUserGroups(_user!.uid).first;
+    for (final group in groupsSnapshot) {
+      groupNames[group.id] = group.name;
+    }
+    
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => UpcomingSummaryDialog(
+        currentUserId: _user!.uid,
+        events: _events,
+        locations: _locations,
+        allUsers: _allUsers,
+        groupNames: groupNames,
+        onDateTap: (date) {
+          // Get data for the selected date
+          final dayLocations = _getLocationsForDate(date);
+          final dayEvents = _events.where((e) => 
+            e.date.year == date.year && e.date.month == date.month && e.date.day == date.day).toList();
+          final dayHolidays = _holidays.where((h) => 
+            h.date.year == date.year && h.date.month == date.month && h.date.day == date.day).toList();
+          final dayBirthdays = _getBirthdaysForDate(date);
+          
+          // Open detail modal
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            builder: (context) => DetailModal(
+              date: date,
+              locations: dayLocations,
+              events: dayEvents,
+              holidays: dayHolidays,
+              birthdays: dayBirthdays,
+              currentUserId: _user!.uid,
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   void _openLocationPicker() async {
     if (_user == null) return;
@@ -568,6 +616,72 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
     );
   }
 
+  // Helper to get locations for a specific date (for DetailModal from Upcoming)
+  List<UserLocation> _getLocationsForDate(DateTime date) {
+    // Get explicit locations for this date
+    final explicit = _locations.where((l) => 
+      l.date.year == date.year && l.date.month == date.month && l.date.day == date.day).toList();
+    
+    final explicitUserIds = explicit.map((l) => l.userId).toSet();
+
+    // Add default locations for users without explicit entries
+    final others = <UserLocation>[];
+    for (final user in _allUsers) {
+      if (!explicitUserIds.contains(user['uid'])) {
+        final defaultLoc = user['defaultLocation'] as String?;
+        final userGroupId = user['groupId'] as String? ?? 'global';
+        
+        if (defaultLoc != null && defaultLoc.isNotEmpty) {
+          final parts = defaultLoc.split(', ');
+          final country = parts[0];
+          final state = parts.length > 1 ? parts[1] : null;
+          
+          others.add(UserLocation(
+            userId: user['uid'],
+            groupId: userGroupId,
+            date: date,
+            nation: country,
+            state: state,
+          ));
+        } else {
+          others.add(UserLocation(
+            userId: user['uid'],
+            groupId: userGroupId,
+            date: date,
+            nation: "No location selected",
+            state: null,
+          ));
+        }
+      }
+    }
+
+    return [...explicit, ...others];
+  }
+
+  // Helper to get birthdays for a specific date
+  List<Birthday> _getBirthdaysForDate(DateTime date) {
+    final birthdays = <Birthday>[];
+    
+    for (final user in _allUsers) {
+      // Get solar birthday
+      final solarBirthday = Birthday.getSolarBirthday(user, date.year);
+      if (solarBirthday != null) {
+        if (solarBirthday.occurrenceDate.month == date.month && 
+            solarBirthday.occurrenceDate.day == date.day) {
+          birthdays.add(solarBirthday);
+        }
+      }
+      
+      // Get lunar birthday
+      final lunarBirthday = Birthday.getLunarBirthday(user, date.year, date);
+      if (lunarBirthday != null) {
+        birthdays.add(lunarBirthday);
+      }
+    }
+    
+    return birthdays;
+  }
+
   @override
   Widget build(BuildContext context) {
     final loggedIn = _user != null;
@@ -585,6 +699,11 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
         ),
         actions: [
           if (loggedIn) ...[
+            IconButton(
+              icon: const Icon(Icons.event_note, color: Colors.black),
+              tooltip: 'Upcoming',
+              onPressed: _openUpcomingSummary,
+            ),
             IconButton(
               icon: const Icon(Icons.notifications, color: Colors.black),
               onPressed: () {
@@ -644,6 +763,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
                   builder: (context) => const GroupManagementDialog(),
                 );
               },
+              onUpcomingTap: _openUpcomingSummary,
               onRSVPManagementTap: () {
                 showDialog(
                   context: context,

@@ -6,6 +6,7 @@ class HomeDrawer extends StatelessWidget {
   final String? photoUrl;
   final VoidCallback onProfileTap;
   final VoidCallback onManageGroupsTap;
+  final VoidCallback onUpcomingTap;
   final VoidCallback onRSVPManagementTap;
   final VoidCallback onSettingsTap;
 
@@ -15,6 +16,7 @@ class HomeDrawer extends StatelessWidget {
     required this.photoUrl,
     required this.onProfileTap,
     required this.onManageGroupsTap,
+    required this.onUpcomingTap,
     required this.onRSVPManagementTap,
     required this.onSettingsTap,
   });
@@ -70,6 +72,14 @@ class HomeDrawer extends StatelessWidget {
             onTap: () {
               Navigator.pop(context);
               onManageGroupsTap();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.event_note),
+            title: const Text("Upcoming"),
+            onTap: () {
+              Navigator.pop(context);
+              onUpcomingTap();
             },
           ),
           ListTile(
