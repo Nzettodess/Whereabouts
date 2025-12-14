@@ -730,9 +730,9 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
         elevation: 1,
         title: Row(
           children: [
-            Image.asset("assets/logo.png", height: 32),
+            Image.asset("assets/orbit_logo.png", height: 32),
             const SizedBox(width: 8),
-            const Text("Whereabouts", style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text("Orbit", style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold)),
           ],
         ),
         actions: [
