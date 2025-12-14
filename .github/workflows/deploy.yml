@@ -43,7 +43,7 @@ jobs:
         run: |
           flutter build web \
             --release \
-            --base-href "/Whereabouts/" \
+            --base-href "/Orbit/" \
             --dart-define=CALENDARIFIC_API_KEY=$CALENDARIFIC_API_KEY \
             --dart-define=FESTIVO_API_KEY=$FESTIVO_API_KEY \
             --dart-define=GOOGLE_CALENDAR_API_KEY=$GOOGLE_CALENDAR_API_KEY
