@@ -290,10 +290,10 @@ class _HomeCalendarState extends State<HomeCalendar> {
                           // Dynamic sizing based on count
                           final count = dayTravelers.length;
                           final double avatarSize = count <= 8 
-                            ? 24.0  // Large - fits 8 avatars nicely in one row
+                            ? 20.0  // Reduced from 24.0 to prevent overflow
                             : count <= 12 
-                              ? 16.0  // Medium for larger groups
-                              : 14.0; // Small for very large groups
+                              ? 15.0  // Slightly smaller for medium groups
+                              : 13.0; // Small for very large groups
                           
                           // Use imageUrl: either photoUrl or fallback
                           final imageUrl = (photoUrl != null && photoUrl is String && photoUrl.isNotEmpty) 

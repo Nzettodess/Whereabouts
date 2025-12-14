@@ -738,7 +738,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
         actions: [
           if (loggedIn) ...[
             IconButton(
-              icon: const Icon(Icons.event_note, color: Colors.black),
+              icon: const Icon(Icons.event_note, color: Colors.deepPurple),
               tooltip: 'Upcoming',
               onPressed: _openUpcomingSummary,
             ),
@@ -749,7 +749,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
             ),
 
             IconButton(
-              icon: const Icon(Icons.notifications, color: Colors.black),
+              icon: const Icon(Icons.notifications, color: Colors.orange),
               onPressed: () {
                 showDialog(
                   context: context,
