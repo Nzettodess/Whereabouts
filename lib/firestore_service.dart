@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 import 'models.dart';
 import 'models/placeholder_member.dart';
+import 'models/join_request.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -30,7 +31,8 @@ class FirestoreService {
     }
   }
 
-  Future<void> joinGroup(String groupId, String userId) async {
+  /// Request to join a group (requires approval from owner/admin)
+  Future<void> requestToJoinGroup(String groupId, String userId) async {
     final docRef = _db.collection('groups').doc(groupId);
     final doc = await docRef.get();
     
@@ -38,9 +40,38 @@ class FirestoreService {
       throw Exception("Group not found. The group ID may be incorrect or the group may have been deleted.");
     }
     
-    await docRef.update({
-      'members': FieldValue.arrayUnion([userId]),
+    // Check if user is already a member
+    final group = Group.fromFirestore(doc);
+    if (group.members.contains(userId)) {
+      throw Exception("You are already a member of this group.");
+    }
+    
+    // Check if there's already a pending request
+    final existingRequest = await _db
+        .collection('join_requests')
+        .where('groupId', isEqualTo: groupId)
+        .where('requesterId', isEqualTo: userId)
+        .where('status', isEqualTo: 'pending')
+        .get();
+    
+    if (existingRequest.docs.isNotEmpty) {
+      throw Exception("You already have a pending request for this group.");
+    }
+    
+    // Create join request
+    final requestId = 'join_${_uuid.v4()}';
+    await _db.collection('join_requests').doc(requestId).set({
+      'groupId': groupId,
+      'requesterId': userId,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
     });
+    
+    // Notify group owner
+    await sendNotification(
+      group.ownerId,
+      'New join request for ${group.name}',
+    );
   }
 
   Future<void> leaveGroup(String groupId, String userId) async {
@@ -877,6 +908,84 @@ class FirestoreService {
       batch.update(doc.reference, {'status': 'cancelled'});
     }
     await batch.commit();
+  }
+
+  // --- Join Requests ---
+
+  /// Get pending join requests for a group (for owner/admin view)
+  Stream<List<JoinRequest>> getPendingJoinRequests(String groupId) {
+    return _db
+        .collection('join_requests')
+        .where('groupId', isEqualTo: groupId)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => JoinRequest.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Get user's pending join requests (to show pending status)
+  Stream<List<JoinRequest>> getMyPendingJoinRequests(String userId) {
+    return _db
+        .collection('join_requests')
+        .where('requesterId', isEqualTo: userId)
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => JoinRequest.fromFirestore(doc))
+            .toList());
+  }
+
+  /// Process a join request (approve or reject)
+  Future<void> processJoinRequest(
+    String requestId,
+    bool approved,
+    String processedBy,
+  ) async {
+    final requestDoc = await _db.collection('join_requests').doc(requestId).get();
+    if (!requestDoc.exists) {
+      throw Exception('Join request not found');
+    }
+    
+    final request = JoinRequest.fromFirestore(requestDoc);
+    
+    if (approved) {
+      // Add user to group members
+      await _db.collection('groups').doc(request.groupId).update({
+        'members': FieldValue.arrayUnion([request.requesterId]),
+      });
+      
+      // Get group name for notification
+      final groupDoc = await _db.collection('groups').doc(request.groupId).get();
+      final groupName = groupDoc.data()?['name'] ?? 'the group';
+      
+      // Notify the requester
+      await sendNotification(
+        request.requesterId,
+        'Your request to join "$groupName" has been approved!',
+      );
+    } else {
+      // Notify rejection
+      final groupDoc = await _db.collection('groups').doc(request.groupId).get();
+      final groupName = groupDoc.data()?['name'] ?? 'the group';
+      
+      await sendNotification(
+        request.requesterId,
+        'Your request to join "$groupName" has been declined.',
+      );
+    }
+    
+    // Update request status
+    await _db.collection('join_requests').doc(requestId).update({
+      'status': approved ? 'approved' : 'rejected',
+      'processedBy': processedBy,
+      'processedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Cancel user's pending join requests (when they want to withdraw)
+  Future<void> cancelJoinRequest(String requestId) async {
+    await _db.collection('join_requests').doc(requestId).delete();
   }
 }
 

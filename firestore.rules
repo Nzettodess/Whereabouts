@@ -101,10 +101,6 @@ service cloud.firestore {
         // Admin can update settings AND promote members to admin (but not change owner)
         (isGroupAdmin(groupId) && 
          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId'])) ||
-        // Any user can join (add themselves to members)
-        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members']) &&
-         userId() in request.resource.data.members &&
-         !(userId() in resource.data.members)) ||
         // Any member can LEAVE (remove themselves from members and optionally admins)
         (userId() in resource.data.members &&
          !(userId() in request.resource.data.members) &&
@@ -246,6 +242,35 @@ service cloud.firestore {
       // User can only delete their own
       allow delete: if isAuthenticated() && 
                        resource.data.userId == userId();
+    }
+    
+    // ============================================
+    // 9. JOIN_REQUESTS COLLECTION
+    // ============================================
+    match /join_requests/{requestId} {
+      // Requester can read their own requests
+      // Owner/Admin can read all requests for their groups
+      allow read: if isAuthenticated() && (
+        resource.data.requesterId == userId() ||
+        isGroupAdmin(resource.data.groupId)
+      );
+      
+      // Any authenticated user can create a join request
+      // Must be requesting for themselves, status must be 'pending'
+      allow create: if isAuthenticated() && 
+                       request.resource.data.requesterId == userId() &&
+                       request.resource.data.status == 'pending';
+      
+      // Only Owner/Admin can process (approve/reject)
+      allow update: if isAuthenticated() && 
+                       isGroupAdmin(resource.data.groupId) &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['status', 'processedBy', 'processedAt']);
+      
+      // Requester can delete their own pending request (cancel)
+      allow delete: if isAuthenticated() && 
+                       resource.data.requesterId == userId() &&
+                       resource.data.status == 'pending';
     }
   }
 }

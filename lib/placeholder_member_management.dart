@@ -69,6 +69,9 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
             ),
             const Divider(),
             
+            // Inheritance Requests Section (at the top, collapsible)
+            _buildPendingRequestsSection(),
+            
             // Placeholder Members List
             Expanded(
               child: StreamBuilder<List<PlaceholderMember>>(
@@ -114,10 +117,6 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
                 },
               ),
             ),
-            
-            // Pending Requests Section (visible to all members)
-            const Divider(),
-            _buildPendingRequestsSection(),
             
             // Create Button (Owner only)
             if (canCreate) ...[
@@ -231,16 +230,41 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
           return const SizedBox.shrink();
         }
         
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              canEdit ? "Pending Inheritance Requests" : "Your Pending Requests",
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+        final title = canEdit ? "Inheritance Requests" : "Your Requests";
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: Colors.orange[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.orange[200]!),
+          ),
+          child: ExpansionTile(
+            initiallyExpanded: true,
+            tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+            shape: const Border(),
+            collapsedShape: const Border(),
+            leading: Icon(Icons.download, color: Colors.orange[700], size: 20),
+            title: Text(
+              '$title (${requests.length})',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.orange[700],
+                fontSize: 14,
+              ),
             ),
-            const SizedBox(height: 8),
-            ...requests.map((request) => _buildRequestTile(request)),
-          ],
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 150),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  itemCount: requests.length,
+                  itemBuilder: (context, index) => _buildRequestTile(requests[index]),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -265,57 +289,52 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
         final requesterName = userData?['displayName'] ?? userData?['email'] ?? 'Unknown';
         final placeholderName = placeholder?.displayName ?? 'Unknown';
         
-        return Card(
-          color: Colors.orange[50],
-          child: ListTile(
-            dense: true,
-            title: Text(
-              isOwnRequest 
-                  ? "Your request to inherit $placeholderName"
-                  : "$requesterName wants to inherit $placeholderName",
-              style: const TextStyle(fontSize: 13),
-            ),
-            trailing: isOwnRequest
-                // Own request - show pending indicator and cancel button
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Chip(
-                        label: Text('Pending', style: TextStyle(fontSize: 10)),
-                        backgroundColor: Colors.orange,
-                        labelStyle: TextStyle(color: Colors.white),
-                        padding: EdgeInsets.zero,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.cancel, color: Colors.red, size: 20),
-                        onPressed: () => _cancelRequest(request, placeholderName),
-                        tooltip: 'Cancel Request',
-                      ),
-                    ],
-                  )
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  isOwnRequest 
+                      ? "Your request to inherit $placeholderName"
+                      : "$requesterName wants to inherit $placeholderName",
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              if (isOwnRequest)
+                // Own request - show cancel button
+                TextButton(
+                  onPressed: () => _cancelRequest(request, placeholderName),
+                  child: const Text("Cancel", style: TextStyle(color: Colors.red, fontSize: 12)),
+                )
+              else
                 // Other's request - show approve/reject buttons
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.check, color: Colors.green, size: 20),
-                        onPressed: () => _processRequest(request, true),
-                        tooltip: 'Approve',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red, size: 20),
-                        onPressed: () => _processRequest(request, false),
-                        tooltip: 'Reject',
-                      ),
-                    ],
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.check_circle, color: Colors.green, size: 22),
+                      onPressed: () => _processRequest(request, true),
+                      tooltip: 'Approve',
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      padding: EdgeInsets.zero,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.cancel, color: Colors.red, size: 22),
+                      onPressed: () => _processRequest(request, false),
+                      tooltip: 'Reject',
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ],
+                ),
+            ],
           ),
         );
       },
     );
   }
+
 
   Future<void> _cancelRequest(InheritanceRequest request, String placeholderName) async {
     final confirm = await showDialog<bool>(

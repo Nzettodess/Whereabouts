@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firestore_service.dart';
 import 'models.dart';
+import 'models/join_request.dart';
+import 'models/placeholder_member.dart';
 import 'placeholder_member_management.dart';
 import 'member_management.dart';
 
@@ -39,12 +42,15 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
     if (_joinCodeController.text.isEmpty || _user == null) return;
     
     try {
-      await _firestoreService.joinGroup(_joinCodeController.text, _user!.uid);
+      await _firestoreService.requestToJoinGroup(_joinCodeController.text, _user!.uid);
       _joinCodeController.clear();
       if (mounted) {
         Navigator.pop(context); // Close join dialog
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Successfully joined group!"))
+          const SnackBar(
+            content: Text("Join request sent! Waiting for admin approval."),
+            duration: Duration(seconds: 3),
+          )
         );
       }
     } catch (e) {
@@ -56,10 +62,8 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text("Group Not Found"),
-            content: Text(
-              "The group ID you entered does not exist. Please check the ID and try again.\n\nError: ${e.toString()}"
-            ),
+            title: const Text("Unable to Join"),
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -71,6 +75,7 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
       }
     }
   }
+
 
   void _showCreateDialog() {
     showDialog(
@@ -93,18 +98,30 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Join Group"),
-        content: TextField(
-          controller: _joinCodeController,
-          decoration: const InputDecoration(labelText: "Group ID"),
+        title: const Text("Request to Join Group"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _joinCodeController,
+              decoration: const InputDecoration(labelText: "Group ID"),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Your request will be sent to the group admin for approval.",
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(onPressed: _joinGroup, child: const Text("Join")),
+          ElevatedButton(onPressed: _joinGroup, child: const Text("Request to Join")),
         ],
       ),
     );
   }
+
 
   void _leaveGroup(Group group) async {
     if (_user == null) return;
@@ -241,33 +258,111 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Placeholder members button (all members can access)
-                            IconButton(
-                              icon: const Icon(Icons.person_outline, color: Colors.blue),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (_) => PlaceholderMemberManagement(
-                                    group: group,
-                                    currentUserId: _user!.uid,
-                                  ),
+                            // Placeholder members button with inheritance request badge
+                            StreamBuilder<List<InheritanceRequest>>(
+                              stream: _firestoreService.getPendingInheritanceRequests(group.id),
+                              builder: (context, inheritSnapshot) {
+                                final inheritPendingCount = inheritSnapshot.data?.length ?? 0;
+                                final isAdminOrOwner = group.ownerId == _user!.uid || 
+                                                       group.admins.contains(_user!.uid);
+                                
+                                return Stack(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.person_outline, color: Colors.blue),
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (_) => PlaceholderMemberManagement(
+                                            group: group,
+                                            currentUserId: _user!.uid,
+                                          ),
+                                        );
+                                      },
+                                      tooltip: 'Placeholder Members',
+                                    ),
+                                    // Show badge if admin/owner and there are pending inheritance requests
+                                    if (isAdminOrOwner && inheritPendingCount > 0)
+                                      Positioned(
+                                        right: 4,
+                                        top: 4,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.red,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          constraints: const BoxConstraints(
+                                            minWidth: 16,
+                                            minHeight: 16,
+                                          ),
+                                          child: Text(
+                                            '$inheritPendingCount',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 );
                               },
-                              tooltip: 'Placeholder Members',
                             ),
-                            // Members button (all roles can view)
-                            IconButton(
-                              icon: const Icon(Icons.group, color: Colors.green),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (_) => MemberManagement(
-                                    group: group,
-                                    currentUserId: _user!.uid,
-                                  ),
+                            // Members button with pending request badge
+                            StreamBuilder<List<JoinRequest>>(
+                              stream: _firestoreService.getPendingJoinRequests(group.id),
+                              builder: (context, requestSnapshot) {
+                                final pendingCount = requestSnapshot.data?.length ?? 0;
+                                final isAdminOrOwner = group.ownerId == _user!.uid || 
+                                                       group.admins.contains(_user!.uid);
+                                
+                                return Stack(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.group, color: Colors.green),
+                                      onPressed: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (_) => MemberManagement(
+                                            group: group,
+                                            currentUserId: _user!.uid,
+                                          ),
+                                        );
+                                      },
+                                      tooltip: 'Members',
+                                    ),
+                                    // Show badge if admin/owner and there are pending requests
+                                    if (isAdminOrOwner && pendingCount > 0)
+                                      Positioned(
+                                        right: 4,
+                                        top: 4,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.red,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          constraints: const BoxConstraints(
+                                            minWidth: 16,
+                                            minHeight: 16,
+                                          ),
+                                          child: Text(
+                                            '$pendingCount',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 );
                               },
-                              tooltip: 'Members',
                             ),
                             IconButton(
                               icon: const Icon(Icons.exit_to_app, color: Colors.red),
@@ -281,6 +376,106 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                 },
               ),
             ),
+            
+            // Pending Join Requests Section (collapsible, scrollable)
+            StreamBuilder<List<JoinRequest>>(
+              stream: _firestoreService.getMyPendingJoinRequests(_user!.uid),
+              builder: (context, pendingSnapshot) {
+                if (!pendingSnapshot.hasData || pendingSnapshot.data!.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                
+                final pendingRequests = pendingSnapshot.data!;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange[200]!),
+                  ),
+                  child: ExpansionTile(
+                    initiallyExpanded: true,
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: const Border(),
+                    collapsedShape: const Border(),
+                    leading: const Icon(Icons.hourglass_empty, size: 18, color: Colors.orange),
+                    title: Text(
+                      "Pending Requests (${pendingRequests.length})",
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.orange[700]),
+                    ),
+                    children: [
+
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 120),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: pendingRequests.length,
+                        itemBuilder: (context, index) {
+                          final request = pendingRequests[index];
+                          return FutureBuilder<DocumentSnapshot>(
+                            future: FirebaseFirestore.instance.collection('groups').doc(request.groupId).get(),
+                            builder: (context, groupSnapshot) {
+                              final groupName = groupSnapshot.data?.get('name') ?? 'Loading...';
+                              return ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: const CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: Color(0xFFFFF3E0),
+                                  child: Icon(Icons.hourglass_empty, size: 16, color: Colors.orange),
+                                ),
+                                title: Text(groupName, style: const TextStyle(fontSize: 14)),
+                                subtitle: const Text(
+                                  "Waiting for approval",
+                                  style: TextStyle(fontSize: 11, color: Colors.orange, fontStyle: FontStyle.italic),
+                                ),
+                                trailing: TextButton(
+                                  onPressed: () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (_) => AlertDialog(
+                                        title: const Text("Cancel Request?"),
+                                        content: const Text("Are you sure you want to cancel this join request?"),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(context, false),
+                                            child: const Text("No"),
+                                          ),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.red,
+                                              foregroundColor: Colors.white,
+                                            ),
+                                            onPressed: () => Navigator.pop(context, true),
+                                            child: const Text("Cancel Request"),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirm == true) {
+                                      await _firestoreService.cancelJoinRequest(request.id);
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text("Join request cancelled")),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  child: const Text("Cancel", style: TextStyle(color: Colors.red, fontSize: 12)),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    ],
+                  ),
+                );
+              },
+            ),
+
+            
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -297,6 +492,7 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                 ),
               ],
             ),
+
           ],
         ),
       ),

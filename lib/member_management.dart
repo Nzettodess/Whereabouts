@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import 'models.dart';
+import 'models/join_request.dart';
 import 'firestore_service.dart';
 import 'edit_member_dialog.dart';
 import 'widgets/user_profile_dialog.dart';
@@ -407,8 +409,142 @@ class _MemberManagementState extends State<MemberManagement> {
     }
   }
 
+  Widget _buildJoinRequestTile(JoinRequest request) {
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('users').doc(request.requesterId).get(),
+      builder: (context, snapshot) {
+        String requesterName = 'Loading...';
+        String requesterEmail = '';
+        
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          requesterName = data['displayName'] ?? data['email'] ?? 'Unknown User';
+          requesterEmail = data['email'] ?? '';
+        }
+        
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: Colors.orange[100],
+                child: Icon(Icons.person_outline, size: 18, color: Colors.orange[700]),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      requesterName,
+                      style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (requesterEmail.isNotEmpty)
+                      Text(
+                        requesterEmail,
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    Text(
+                      'Requested ${DateFormat('MMM d').format(request.createdAt)}',
+                      style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                    ),
+                  ],
+                ),
+              ),
+              // Approve button
+              IconButton(
+                icon: const Icon(Icons.check_circle, color: Colors.green),
+                tooltip: 'Approve',
+                onPressed: () => _processJoinRequest(request, true),
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                padding: EdgeInsets.zero,
+              ),
+              // Reject button
+              IconButton(
+                icon: const Icon(Icons.cancel, color: Colors.red),
+                tooltip: 'Reject',
+                onPressed: () => _processJoinRequest(request, false),
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                padding: EdgeInsets.zero,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _processJoinRequest(JoinRequest request, bool approve) async {
+    
+    // Get requester name for confirmation
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(request.requesterId)
+        .get();
+    final requesterName = userDoc.data()?['displayName'] ?? 'this user';
+    
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(approve ? 'Approve Join Request?' : 'Reject Join Request?'),
+        content: Text(approve 
+          ? '$requesterName will be added to the group and can access group data.'
+          : '$requesterName will be notified that their request was declined.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false), 
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: approve ? Colors.green : Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(approve ? 'Approve' : 'Reject'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirm == true) {
+      try {
+        await _firestoreService.processJoinRequest(
+          request.id, 
+          approve, 
+          widget.currentUserId,
+        );
+        
+        if (approve) {
+          await _refreshGroup();
+          await _loadMemberDetails();
+        }
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(approve 
+                ? '$requesterName has been added to the group!' 
+                : 'Join request rejected.'),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e')),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+
     return Dialog(
       child: Container(
         constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
@@ -440,6 +576,55 @@ class _MemberManagementState extends State<MemberManagement> {
               style: TextStyle(color: Colors.grey[600]),
             ),
             const Divider(),
+            
+            // Join Requests Section (collapsible, only for owner/admin)
+            if (canManage)
+              StreamBuilder<List<JoinRequest>>(
+                stream: _firestoreService.getPendingJoinRequests(_group.id),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  
+                  final requests = snapshot.data!;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange[200]!),
+                    ),
+                    child: ExpansionTile(
+                      initiallyExpanded: true,
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+                      shape: const Border(),
+                      collapsedShape: const Border(),
+                      leading: Icon(Icons.person_add, color: Colors.orange[700], size: 20),
+                      title: Text(
+                        'Join Requests (${requests.length})',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange[700],
+                          fontSize: 14,
+                        ),
+                      ),
+                      children: [
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 150),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            itemCount: requests.length,
+                            itemBuilder: (context, index) => _buildJoinRequestTile(requests[index]),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+
+            
             Expanded(
               child: Builder(
                 builder: (context) {
