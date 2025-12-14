@@ -23,6 +23,7 @@ import 'widgets/home_calendar.dart';
 import 'widgets/home_drawer.dart';
 import 'upcoming_summary_dialog.dart';
 import 'detail_modal.dart';
+import 'widgets/credits_feedback_dialog.dart';
 import 'birthday_baby_dialog.dart';
 
 
@@ -752,12 +753,21 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
             ),
           ),
         ),
-        title: Row(
-          children: [
-            SvgPicture.asset("assets/orbit_logo.svg", height: 40),
-            const SizedBox(width: 8),
-            Text("Orbit", style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-          ],
+        title: GestureDetector(
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (context) => const CreditsAndFeedbackDialog(),
+            );
+          },
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SvgPicture.asset("assets/orbit_logo.svg", height: 40),
+              const SizedBox(width: 8),
+              Text("Orbit", style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            ],
+          ),
         ),
         actions: [
           if (loggedIn) ...[

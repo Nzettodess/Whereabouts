@@ -270,5 +270,19 @@ service cloud.firestore {
                        resource.data.requesterId == userId() &&
                        resource.data.status == 'pending';
     }
+    
+    // ============================================
+    // 9. FEEDBACK COLLECTION (App Feedback)
+    // ============================================
+    match /feedback/{feedbackId} {
+      // Only admin can read (via Firebase Console)
+      allow read: if false;
+      
+      // Any authenticated user can submit feedback
+      allow create: if isAuthenticated();
+      
+      // No updates or deletes
+      allow update, delete: if false;
+    }
   }
 }
