@@ -1,23 +1,32 @@
 {
+    "id": "/",
     "name": "Orbit",
     "short_name": "Orbit",
-    "start_url": ".",
+    "start_url": "./",
+    "scope": "./",
     "display": "standalone",
     "background_color": "#673AB7",
     "theme_color": "#673AB7",
     "description": "Keep your world in sync. A location and calendar coordination app for groups.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
+    "categories": [
+        "productivity",
+        "lifestyle",
+        "social"
+    ],
     "icons": [
         {
             "src": "icons/Icon-192.png",
             "sizes": "192x192",
-            "type": "image/png"
+            "type": "image/png",
+            "purpose": "any"
         },
         {
             "src": "icons/Icon-512.png",
             "sizes": "512x512",
-            "type": "image/png"
+            "type": "image/png",
+            "purpose": "any"
         },
         {
             "src": "icons/Icon-maskable-192.png",
@@ -30,6 +39,48 @@
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "maskable"
+        }
+    ],
+    "screenshots": [
+        {
+            "src": "icons/screenshot-narrow.png",
+            "sizes": "689x974",
+            "type": "image/png",
+            "form_factor": "narrow",
+            "label": "Orbit Mobile View"
+        },
+        {
+            "src": "icons/screenshot-wide.png",
+            "sizes": "1744x864",
+            "type": "image/png",
+            "form_factor": "wide",
+            "label": "Orbit Desktop View"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Add Location",
+            "short_name": "Location",
+            "description": "Set your location for today",
+            "url": "./?action=add-location",
+            "icons": [
+                {
+                    "src": "icons/Icon-192.png",
+                    "sizes": "192x192"
+                }
+            ]
+        },
+        {
+            "name": "Add Event",
+            "short_name": "Event",
+            "description": "Create a new group event",
+            "url": "./?action=add-event",
+            "icons": [
+                {
+                    "src": "icons/Icon-192.png",
+                    "sizes": "192x192"
+                }
+            ]
         }
     ]
 }
