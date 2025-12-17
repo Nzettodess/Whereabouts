@@ -879,7 +879,11 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
                   showDialog(
                     context: context,
                     builder: (context) => SettingsDialog(currentUserId: _user!.uid),
-                  );
+                  ).then((_) {
+                    // Force refresh data after settings change (holidays, calendars, etc.)
+                    _loadData();
+                    if (mounted) setState(() {});
+                  });
                 }
               },
             )

@@ -43,6 +43,8 @@ class _HomeCalendarState extends State<HomeCalendar> {
   // === PERFORMANCE OPTIMIZATION: Cached data for O(1) lookups ===
   // Instead of computing data for all 42 cells on every rebuild,
   // we pre-compute once when month changes and store in maps
+  // GRANULAR CACHING: Each cache is updated only when its source data changes
+  // PRELOADING: Cache includes prev/current/next months for seamless swipe
   Map<String, List<UserLocation>> _cachedLocations = {};
   Map<String, List<UserLocation>> _cachedTravelers = {};
   Map<String, List<GroupEvent>> _cachedEvents = {};
@@ -50,19 +52,48 @@ class _HomeCalendarState extends State<HomeCalendar> {
   Map<String, List<Birthday>> _cachedBirthdays = {};
   Map<String, List<String>> _cachedReligiousDates = {};
   DateTime? _lastCachedMonth;
+  List<DateTime>? _visibleDates; // Cache visible dates for current month
+  Set<String> _preloadedMonths = {}; // Track which months are preloaded
+
 
   @override
   void didUpdateWidget(HomeCalendar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Invalidate cache when data changes
-    if (oldWidget.locations != widget.locations ||
-        oldWidget.events != widget.events ||
-        oldWidget.holidays != widget.holidays ||
-        oldWidget.allUsers != widget.allUsers ||
-        oldWidget.placeholderMembers != widget.placeholderMembers ||
-        oldWidget.currentViewMonth.month != widget.currentViewMonth.month ||
-        oldWidget.currentViewMonth.year != widget.currentViewMonth.year) {
+    
+    // Check if month changed - need full recache
+    final monthChanged = oldWidget.currentViewMonth.month != widget.currentViewMonth.month ||
+        oldWidget.currentViewMonth.year != widget.currentViewMonth.year;
+    
+    if (monthChanged) {
+      _lastCachedMonth = null;
+      _visibleDates = null;
       _precomputeMonthData(widget.currentViewMonth);
+      return;
+    }
+    
+    // GRANULAR CACHE UPDATES - only update what changed
+    _visibleDates ??= _getVisibleDatesForMonth(widget.currentViewMonth);
+    
+    // Locations or users changed -> update locations/travelers/birthdays caches only
+    if (oldWidget.locations != widget.locations || 
+        oldWidget.allUsers != widget.allUsers ||
+        oldWidget.placeholderMembers != widget.placeholderMembers) {
+      _updateLocationsCacheOnly();
+    }
+    
+    // Events changed -> update events cache only
+    if (oldWidget.events != widget.events) {
+      _updateEventsCacheOnly();
+    }
+    
+    // Holidays changed -> update holidays cache only
+    if (oldWidget.holidays != widget.holidays) {
+      _updateHolidaysCacheOnly();
+    }
+    
+    // Calendar display setting changed -> update religious dates cache only
+    if (oldWidget.tileCalendarDisplay != widget.tileCalendarDisplay) {
+      _updateReligiousDatesCacheOnly();
     }
   }
 
@@ -75,42 +106,157 @@ class _HomeCalendarState extends State<HomeCalendar> {
     });
   }
 
-  /// Pre-compute all data for the visible month (42 dates)
-  /// This runs ONCE when month changes, not 42 times per frame
-  void _precomputeMonthData(DateTime month) {
-    if (_lastCachedMonth?.year == month.year && 
-        _lastCachedMonth?.month == month.month) {
-      return; // Already cached for this month
-    }
-    
-    _lastCachedMonth = month;
+  /// Force refresh the cache - call this after settings changes
+  void forceRefresh() {
+    _lastCachedMonth = null;
+    _visibleDates = null;
+    _preloadedMonths.clear();  // Clear preload tracking to reload all
     _cachedLocations.clear();
     _cachedTravelers.clear();
     _cachedEvents.clear();
     _cachedHolidays.clear();
     _cachedBirthdays.clear();
     _cachedReligiousDates.clear();
-    
-    // Get the 42 visible dates for this month view
-    final visibleDates = _getVisibleDatesForMonth(month);
-    
-    for (final date in visibleDates) {
+    _precomputeMonthData(widget.currentViewMonth);
+  }
+
+  // === GRANULAR CACHE UPDATE METHODS ===
+  
+  void _updateLocationsCacheOnly() {
+    final dates = _visibleDates ?? _getVisibleDatesForMonth(widget.currentViewMonth);
+    for (final date in dates) {
       final key = _dateKey(date);
-      
-      // Pre-compute all data for this date
       _cachedLocations[key] = _computeLocationsForDate(date);
       _cachedTravelers[key] = _computeTravelersForDate(date);
+      _cachedBirthdays[key] = _computeBirthdaysForDate(date);
+    }
+    if (mounted) setState(() {});
+  }
+  
+  void _updateEventsCacheOnly() {
+    final dates = _visibleDates ?? _getVisibleDatesForMonth(widget.currentViewMonth);
+    for (final date in dates) {
+      final key = _dateKey(date);
       _cachedEvents[key] = widget.events.where((e) => 
         e.date.year == date.year && e.date.month == date.month && e.date.day == date.day).toList();
+    }
+    if (mounted) setState(() {});
+  }
+  
+  void _updateHolidaysCacheOnly() {
+    final dates = _visibleDates ?? _getVisibleDatesForMonth(widget.currentViewMonth);
+    for (final date in dates) {
+      final key = _dateKey(date);
       _cachedHolidays[key] = widget.holidays.where((h) => 
         h.date.year == date.year && h.date.month == date.month && h.date.day == date.day).toList();
-      _cachedBirthdays[key] = _computeBirthdaysForDate(date);
+    }
+    if (mounted) setState(() {});
+  }
+  
+  void _updateReligiousDatesCacheOnly() {
+    final dates = _visibleDates ?? _getVisibleDatesForMonth(widget.currentViewMonth);
+    for (final date in dates) {
+      final key = _dateKey(date);
       _cachedReligiousDates[key] = widget.tileCalendarDisplay == 'none' 
         ? [] 
         : ReligiousCalendarHelper.getReligiousDates(date, [widget.tileCalendarDisplay]);
     }
+    if (mounted) setState(() {});
+  }
+
+  /// Pre-compute all data for the visible month (42 dates)
+  /// This runs ONCE when month changes, not 42 times per frame
+  void _precomputeMonthData(DateTime month) {
+    final monthKey = '${month.year}-${month.month}';
+    
+    // Check if this month is already fully cached
+    if (_preloadedMonths.contains(monthKey) && 
+        _lastCachedMonth?.year == month.year && 
+        _lastCachedMonth?.month == month.month) {
+      return; // Already cached for this month
+    }
+    
+    _lastCachedMonth = month;
+    
+    // DON'T clear all caches - keep preloaded adjacent months!
+    // Only compute for this month if not already preloaded
+    _visibleDates = _getVisibleDatesForMonth(month);
+    
+    for (final date in _visibleDates!) {
+      final key = _dateKey(date);
+      
+      // Only compute if not already cached
+      if (!_cachedLocations.containsKey(key)) {
+        _cachedLocations[key] = _computeLocationsForDate(date);
+        _cachedTravelers[key] = _computeTravelersForDate(date);
+        _cachedEvents[key] = widget.events.where((e) => 
+          e.date.year == date.year && e.date.month == date.month && e.date.day == date.day).toList();
+        _cachedHolidays[key] = widget.holidays.where((h) => 
+          h.date.year == date.year && h.date.month == date.month && h.date.day == date.day).toList();
+        _cachedBirthdays[key] = _computeBirthdaysForDate(date);
+        _cachedReligiousDates[key] = widget.tileCalendarDisplay == 'none' 
+          ? [] 
+          : ReligiousCalendarHelper.getReligiousDates(date, [widget.tileCalendarDisplay]);
+      }
+    }
+    
+    _preloadedMonths.add(monthKey);
+    
+    // PRELOAD ADJACENT MONTHS (async, after current month is displayed)
+    // This makes swipe transitions seamless!
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _preloadAdjacentMonths(month);
+    });
     
     if (mounted) setState(() {});
+  }
+
+  /// Preload previous and next month data for seamless swipe
+  void _preloadAdjacentMonths(DateTime currentMonth) {
+    final prevMonth = DateTime(currentMonth.year, currentMonth.month - 1, 1);
+    final nextMonth = DateTime(currentMonth.year, currentMonth.month + 1, 1);
+    
+    _preloadMonthIfNeeded(prevMonth);
+    _preloadMonthIfNeeded(nextMonth);
+    
+    // Clean up old months to save memory (keep only 3 months cached)
+    _cleanupOldMonths(currentMonth);
+  }
+  
+  /// Preload a single month's data if not already cached
+  void _preloadMonthIfNeeded(DateTime month) {
+    final monthKey = '${month.year}-${month.month}';
+    if (_preloadedMonths.contains(monthKey)) return;
+    
+    final dates = _getVisibleDatesForMonth(month);
+    for (final date in dates) {
+      final key = _dateKey(date);
+      if (!_cachedLocations.containsKey(key)) {
+        _cachedLocations[key] = _computeLocationsForDate(date);
+        _cachedTravelers[key] = _computeTravelersForDate(date);
+        _cachedEvents[key] = widget.events.where((e) => 
+          e.date.year == date.year && e.date.month == date.month && e.date.day == date.day).toList();
+        _cachedHolidays[key] = widget.holidays.where((h) => 
+          h.date.year == date.year && h.date.month == date.month && h.date.day == date.day).toList();
+        _cachedBirthdays[key] = _computeBirthdaysForDate(date);
+        _cachedReligiousDates[key] = widget.tileCalendarDisplay == 'none' 
+          ? [] 
+          : ReligiousCalendarHelper.getReligiousDates(date, [widget.tileCalendarDisplay]);
+      }
+    }
+    _preloadedMonths.add(monthKey);
+  }
+  
+  /// Remove old month caches to save memory
+  void _cleanupOldMonths(DateTime currentMonth) {
+    final keepMonths = <String>{
+      '${currentMonth.year}-${currentMonth.month}',
+      '${DateTime(currentMonth.year, currentMonth.month - 1, 1).year}-${DateTime(currentMonth.year, currentMonth.month - 1, 1).month}',
+      '${DateTime(currentMonth.year, currentMonth.month + 1, 1).year}-${DateTime(currentMonth.year, currentMonth.month + 1, 1).month}',
+    };
+    
+    // Remove months that are no longer adjacent
+    _preloadedMonths.removeWhere((m) => !keepMonths.contains(m));
   }
 
   /// Get the 42 visible dates for a month view
@@ -336,7 +482,19 @@ class _HomeCalendarState extends State<HomeCalendar> {
       margin: EdgeInsets.symmetric(horizontal: sizes.cardMargin),
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: SfCalendar(
+      // Use LayoutBuilder ONCE here instead of 42 times inside each cell
+      // This dramatically improves swipe performance
+      child: LayoutBuilder(
+        builder: (context, calendarConstraints) {
+          // Pre-calculate maxBars once based on calendar height
+          // Each cell is roughly calendarHeight / 6 rows
+          final estimatedCellHeight = calendarConstraints.maxHeight / 6;
+          final reservedHeight = sizes.dayFontSize + 8 + sizes.avatarSize + 12;
+          final availableHeight = estimatedCellHeight - reservedHeight;
+          final barHeight = sizes.barFontSize + 5;
+          final dynamicMaxBars = (availableHeight / barHeight).floor().clamp(1, 10);
+          
+          return SfCalendar(
         controller: widget.controller,
         view: CalendarView.month,
         headerHeight: 0,
@@ -388,31 +546,25 @@ class _HomeCalendarState extends State<HomeCalendar> {
           
           final isDarkMode = Theme.of(context).brightness == Brightness.dark;
           
-          // Use LayoutBuilder to calculate dynamic maxBars based on actual cell height
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              // Calculate how many bars can fit
-              // Reserved space: header row (~20px) + avatar row (~24px) + padding (~10px) + safety margin
-              final reservedHeight = sizes.dayFontSize + 8 + sizes.avatarSize + 12;
-              final availableHeight = constraints.maxHeight - reservedHeight;
-              final barHeight = sizes.barFontSize + 5;  // bar font + padding + margin
-              
-              // Calculate maxBars dynamically (minimum 1, reasonable max)
-              final dynamicMaxBars = (availableHeight / barHeight).floor().clamp(1, 10);
-              
-              // Items to display as bars (Holidays, Events & Birthdays)
-              final allItems = <dynamic>[...dayHolidays, ...dayEvents, ...dayBirthdays];
-              final displayItems = allItems.take(dynamicMaxBars).toList();
-              final remainingCount = (allItems.length - dynamicMaxBars).clamp(0, 99);
+          // Items to display as bars (Holidays, Events & Birthdays)
+          // Using pre-calculated dynamicMaxBars from parent LayoutBuilder for performance
+          final allItems = <dynamic>[...dayHolidays, ...dayEvents, ...dayBirthdays];
+          final displayItems = allItems.take(dynamicMaxBars).toList();
+          final remainingCount = (allItems.length - dynamicMaxBars).clamp(0, 99);
 
-              return Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: isDarkMode ? Colors.white10 : Colors.grey.withOpacity(0.1)),
-                  color: isToday 
-                    ? Theme.of(context).colorScheme.primary.withOpacity(isDarkMode ? 0.35 : 0.2) // Higher opacity in dark mode for vibrancy
-                    : (isCurrentMonth 
-                        ? Theme.of(context).colorScheme.surface 
-                        : (isDarkMode ? Colors.grey.shade900 : Colors.grey[50])),
+          // RepaintBoundary isolates this cell's painting from others
+          // AnimatedContainer smoothly transitions colors during month swipe
+          return RepaintBoundary(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 1000),
+              curve: Curves.easeOut,
+              decoration: BoxDecoration(
+                border: Border.all(color: isDarkMode ? Colors.white10 : Colors.grey.withOpacity(0.1)),
+                color: isToday 
+                  ? Theme.of(context).colorScheme.primary.withOpacity(isDarkMode ? 0.35 : 0.2)
+                  : (isCurrentMonth 
+                      ? Theme.of(context).colorScheme.surface 
+                      : (isDarkMode ? Colors.grey.shade900 : Colors.grey[50])),
             ),
             child: Padding(
               padding: EdgeInsets.all(sizes.cellPadding),
@@ -607,9 +759,8 @@ class _HomeCalendarState extends State<HomeCalendar> {
                 ],
               ),
             ),
-          );
-        },  // Close LayoutBuilder
-      );
+          ),
+          );  // Close RepaintBoundary
         },
         onTap: (CalendarTapDetails details) {
           if (details.targetElement == CalendarElement.calendarCell && details.date != null) {
@@ -635,8 +786,10 @@ class _HomeCalendarState extends State<HomeCalendar> {
             );
           }
         },
-      ),
-    );
+      );  // Close SfCalendar
+    },  // Close LayoutBuilder builder
+      ),  // Close LayoutBuilder
+    );  // Close Card
   }
 
   String _getAgeSuffix(int age) {
