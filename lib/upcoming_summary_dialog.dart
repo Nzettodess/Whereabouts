@@ -93,58 +93,76 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(20.0),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
+            // Header - responsive padding
+            Builder(builder: (context) {
+              final isNarrow = MediaQuery.of(context).size.width < 450;
+              return Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isNarrow ? 12 : 20,
+                  vertical: isNarrow ? 8 : 16,
                 ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.event_note, color: Theme.of(context).colorScheme.onSurface),
-                      const SizedBox(width: 8),
-                      Text(
-                        "Upcoming",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.event_note, 
                           color: Theme.of(context).colorScheme.onSurface,
+                          size: isNarrow ? 18 : 24,
                         ),
+                        SizedBox(width: isNarrow ? 6 : 8),
+                        Text(
+                          "Upcoming",
+                          style: TextStyle(
+                            fontSize: isNarrow ? 16 : 20,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      iconSize: isNarrow ? 20 : 24,
+                      onPressed: () => Navigator.pop(context),
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(
+                        minWidth: isNarrow ? 32 : 48,
+                        minHeight: isNarrow ? 32 : 48,
                       ),
-                    ],
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
+                    ),
+                  ],
+                ),
+              );
+            }),
             
-            // Filter chips
+            // Filter chips - compact on mobile
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: EdgeInsets.symmetric(
+                horizontal: MediaQuery.of(context).size.width < 450 ? 8 : 16,
+                vertical: MediaQuery.of(context).size.width < 450 ? 4 : 8,
+              ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
                     _buildFilterChip(null, 'All', Icons.list),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     _buildFilterChip(UpcomingItemType.event, 'Events', Icons.celebration),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     _buildFilterChip(UpcomingItemType.locationChange, 'Locations', Icons.location_on),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     _buildFilterChip(UpcomingItemType.birthday, 'Birthdays', Icons.cake),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     _buildFilterChip(UpcomingItemType.holiday, 'Holidays', Icons.flag),
-                    const SizedBox(width: 16), // Extra padding at end for visibility
+                    const SizedBox(width: 8),
                   ],
                 ),
               ),
@@ -181,26 +199,38 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
                           ),
                           // Load More button
                           if (_daysToShow < _maxDays)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  onPressed: () {
-                                    setState(() {
-                                      _daysToShow = _daysToShow + _daysIncrement;
-                                      if (_daysToShow > _maxDays) _daysToShow = _maxDays;
-                                    });
-                                  },
-                                  icon: const Icon(Icons.expand_more),
-                                  label: Text('Load more (showing $_daysToShow of $_maxDays days)'),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                    side: BorderSide(color: Colors.deepPurple.shade300),
+                            Builder(builder: (context) {
+                              final screenWidth = MediaQuery.of(context).size.width;
+                              final isVeryNarrow = screenWidth < 390;
+                              return Padding(
+                                padding: EdgeInsets.symmetric(
+                                  vertical: isVeryNarrow ? 8 : 16,
+                                  horizontal: isVeryNarrow ? 12 : 24,
+                                ),
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    onPressed: () {
+                                      setState(() {
+                                        _daysToShow = _daysToShow + _daysIncrement;
+                                        if (_daysToShow > _maxDays) _daysToShow = _maxDays;
+                                      });
+                                    },
+                                    icon: Icon(Icons.expand_more, size: isVeryNarrow ? 16 : 20),
+                                    label: Text(
+                                      isVeryNarrow 
+                                        ? 'More ($_daysToShow/$_maxDays)'
+                                        : 'Load more (showing $_daysToShow of $_maxDays days)',
+                                      style: TextStyle(fontSize: isVeryNarrow ? 11 : 14),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: EdgeInsets.symmetric(vertical: isVeryNarrow ? 6 : 12),
+                                      side: BorderSide(color: Colors.deepPurple.shade300),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            )
+                              );
+                            })
                           else
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -399,65 +429,55 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Card(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Theme.of(context).dividerColor),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => _handleItemTap(item),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, color: iconColor, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
+      child: Builder(
+        builder: (context) {
+          final isNarrow = MediaQuery.of(context).size.width < 450;
+          final iconSize = isNarrow ? 32.0 : 40.0;
+          
+          return Card(
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: Theme.of(context).dividerColor),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => _handleItemTap(item),
+              child: Padding(
+                padding: EdgeInsets.all(isNarrow ? 8 : 12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: iconSize,
+                      height: iconSize,
+                      decoration: BoxDecoration(
+                        color: bgColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(icon, color: iconColor, size: isNarrow ? 16 : 20),
+                    ),
+                    SizedBox(width: isNarrow ? 8 : 12),
+                    Expanded(
+                      child: Text(
                         item.title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          fontSize: 14,
+                          fontSize: isNarrow ? 12 : 14,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (item.subtitle != null && item.subtitle!.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          item.subtitle!,
-                          style: TextStyle(
-                            color: Theme.of(context).hintColor,
-                            fontSize: 12,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 4),
+                    // Compact group badges
+                    _buildGroupBadges(item.groupNames, isNarrow),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                // Stacked group badges for items with multiple groups
-                _buildGroupBadges(item.groupNames),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -580,7 +600,44 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
   }
 
   /// Build stacked group badges - shows all groups for deduplicated items
-  Widget _buildGroupBadges(List<String> groupNames) {
+  Widget _buildGroupBadges(List<String> groupNames, [bool isNarrow = false]) {
+    if (groupNames.isEmpty) return const SizedBox.shrink();
+    
+    // On mobile, show max 2 badges in a single row
+    if (isNarrow) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            constraints: const BoxConstraints(maxWidth: 65),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              groupNames.first,
+              style: TextStyle(
+                fontSize: 9,
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (groupNames.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(left: 2),
+              child: Text(
+                '+${groupNames.length - 1}',
+                style: TextStyle(fontSize: 8, color: Colors.grey.shade500),
+              ),
+            ),
+        ],
+      );
+    }
+    
     if (groupNames.length == 1) {
       // Single group - simple badge
       return Container(

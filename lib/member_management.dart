@@ -545,36 +545,50 @@ class _MemberManagementState extends State<MemberManagement> {
 
   @override
   Widget build(BuildContext context) {
+    final isNarrow = MediaQuery.of(context).size.width < 450;
 
     return Dialog(
       child: Container(
         constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isNarrow ? 12 : 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header - responsive
             Row(
               children: [
-                const Icon(Icons.group, color: Colors.blue),
-                const SizedBox(width: 8),
+                Icon(Icons.group, color: Colors.blue, size: isNarrow ? 18 : 24),
+                SizedBox(width: isNarrow ? 6 : 8),
                 Expanded(
                   child: Text(
                     'Members - ${_group.name}',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: isNarrow ? 14 : 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close),
+                  iconSize: isNarrow ? 20 : 24,
                   onPressed: () => Navigator.pop(context),
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(
+                    minWidth: isNarrow ? 32 : 40,
+                    minHeight: isNarrow ? 32 : 40,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: isNarrow ? 4 : 8),
             Text(
               '${_group.members.length} member${_group.members.length != 1 ? 's' : ''}',
-              style: TextStyle(color: Theme.of(context).hintColor),
+              style: TextStyle(
+                color: Theme.of(context).hintColor,
+                fontSize: isNarrow ? 11 : 14,
+              ),
             ),
             const Divider(),
             
@@ -663,17 +677,26 @@ class _MemberManagementState extends State<MemberManagement> {
                           ),
                         ),
                         title: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Expanded(child: Text(name, overflow: TextOverflow.ellipsis)),
-                            if (isCurrentUser)
+                            Flexible(
+                              child: Text(
+                                name, 
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                            if (isCurrentUser) ...[
+                              const SizedBox(width: 4),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                 decoration: BoxDecoration(
                                   color: Colors.green[100],
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(3),
                                 ),
-                                child: const Text('You', style: TextStyle(fontSize: 10, color: Colors.green)),
+                                child: Text('You', style: TextStyle(fontSize: 8, color: Colors.green[700], fontWeight: FontWeight.w600)),
                               ),
+                            ],
                           ],
                         ),
                         subtitle: Column(

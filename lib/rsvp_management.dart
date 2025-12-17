@@ -24,43 +24,62 @@ class _RSVPManagementDialogState extends State<RSVPManagementDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isVeryNarrow = screenWidth < 390;
+    final isNarrow = screenWidth < 450;
+    
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 600, // Constrained width
+        width: 600,
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.8,
         ),
         child: Column(
           children: [
-            // Header
+            // Header - responsive padding
             Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: EdgeInsets.symmetric(
+                horizontal: isNarrow ? 12 : 16,
+                vertical: isNarrow ? 8 : 12,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'RSVP',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: isNarrow ? 16 : 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
+                    iconSize: isNarrow ? 20 : 24,
                     onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(
+                      minWidth: isNarrow ? 32 : 48,
+                      minHeight: isNarrow ? 32 : 48,
+                    ),
                   ),
                 ],
               ),
             ),
             const Divider(height: 1),
 
-            // Filter Chips
+            // Filter Chips - compact on mobile
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: EdgeInsets.symmetric(
+                horizontal: isNarrow ? 8 : 16,
+                vertical: isNarrow ? 6 : 12,
+              ),
               child: Row(
                 children: [
                   _buildFilterChip('All', EventFilter.all),
-                  const SizedBox(width: 8),
+                  SizedBox(width: isNarrow ? 4 : 8),
                   _buildFilterChip('Upcoming', EventFilter.upcoming),
-                  const SizedBox(width: 8),
+                  SizedBox(width: isNarrow ? 4 : 8),
                   _buildFilterChip('Past', EventFilter.past),
                 ],
               ),
@@ -202,6 +221,9 @@ class _EventCardState extends State<EventCard> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isVeryNarrow = screenWidth < 390;
+    final isNarrow = screenWidth < 450;
     final isCreator = widget.event.creatorId == widget.currentUserId;
     final isPastEvent = widget.event.date.isBefore(DateTime.now());
 
@@ -228,15 +250,15 @@ class _EventCardState extends State<EventCard> {
         return Card(
           elevation: 2,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(isNarrow ? 10 : 12),
           ),
           child: Column(
             children: [
               InkWell(
                 onTap: _toggleExpand,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(isVeryNarrow ? 8 : isNarrow ? 10 : 12),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(isVeryNarrow ? 8 : isNarrow ? 10 : 16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -250,36 +272,39 @@ class _EventCardState extends State<EventCard> {
                               children: [
                                 Text(
                                   widget.event.title,
-                                  style: const TextStyle(
-                                    fontSize: 18,
+                                  style: TextStyle(
+                                    fontSize: isVeryNarrow ? 12 : isNarrow ? 14 : 18,
                                     fontWeight: FontWeight.bold,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 4),
+                                SizedBox(height: isNarrow ? 2 : 4),
                                 Row(
                                   children: [
-                                    Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      widget.event.hasTime
-                                          ? DateFormat('MMM dd, yyyy • hh:mm a').format(widget.event.date)
-                                          : DateFormat('MMM dd, yyyy').format(widget.event.date),
-                                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                                    Icon(Icons.calendar_today, size: isVeryNarrow ? 10 : isNarrow ? 11 : 14, color: Colors.grey[600]),
+                                    SizedBox(width: isVeryNarrow ? 2 : isNarrow ? 3 : 4),
+                                    Flexible(
+                                      child: Text(
+                                        widget.event.hasTime
+                                            ? DateFormat('MMM dd, yyyy • hh:mm a').format(widget.event.date)
+                                            : DateFormat('MMM dd, yyyy').format(widget.event.date),
+                                        style: TextStyle(color: Colors.grey[600], fontSize: isVeryNarrow ? 10 : isNarrow ? 11 : 13),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
                                   ],
                                 ),
                                 if (widget.event.venue != null && widget.event.venue!.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
+                                  SizedBox(height: isVeryNarrow ? 1 : isNarrow ? 2 : 4),
                                   Row(
                                     children: [
-                                      Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
-                                      const SizedBox(width: 4),
+                                      Icon(Icons.location_on, size: isVeryNarrow ? 10 : isNarrow ? 11 : 14, color: Colors.grey[600]),
+                                      SizedBox(width: isVeryNarrow ? 2 : isNarrow ? 3 : 4),
                                       Expanded(
                                         child: Text(
                                           widget.event.venue!,
-                                          style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                                          style: TextStyle(color: Colors.grey[600], fontSize: isVeryNarrow ? 10 : isNarrow ? 11 : 13),
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
@@ -292,6 +317,7 @@ class _EventCardState extends State<EventCard> {
                           Icon(
                             _isExpanded ? Icons.expand_less : Icons.expand_more,
                             color: Colors.grey[600],
+                            size: isVeryNarrow ? 18 : isNarrow ? 20 : 24,
                           ),
                         ],
                       ),
@@ -306,27 +332,31 @@ class _EventCardState extends State<EventCard> {
                             color: Colors.green,
                             label: 'Yes',
                             count: accepted,
+                            isNarrow: isNarrow,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: isNarrow ? 4 : 8),
                           _buildStatChip(
                             icon: Icons.cancel,
                             color: Colors.red,
                             label: 'No',
                             count: declined,
+                            isNarrow: isNarrow,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: isNarrow ? 4 : 8),
                           _buildStatChip(
                             icon: Icons.help_outline,
                             color: Colors.orange,
                             label: 'Maybe',
                             count: maybe,
+                            isNarrow: isNarrow,
                           ),
-                          const SizedBox(width: 8),
+                          SizedBox(width: isNarrow ? 4 : 8),
                           _buildStatChip(
                             icon: Icons.circle_outlined,
                             color: Colors.grey,
                             label: 'Pending',
                             count: noResponse,
+                            isNarrow: isNarrow,
                           ),
                         ],
                       ),
@@ -367,15 +397,21 @@ class _EventCardState extends State<EventCard> {
 
                       // Action buttons for creator
                       if (isCreator && noResponse > 0 && !isPastEvent) ...[
-                        const SizedBox(height: 12),
+                        SizedBox(height: isVeryNarrow ? 8 : 12),
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
                             onPressed: () => _sendReminders(widget.event, stats['noResponseUserIds']),
-                            icon: const Icon(Icons.notifications_active, size: 18),
-                            label: Text('Send Reminder to $noResponse ${noResponse == 1 ? 'Person' : 'People'}'),
+                            icon: Icon(Icons.notifications_active, size: isVeryNarrow ? 14 : 18),
+                            label: Text(
+                              isVeryNarrow 
+                                ? 'Remind $noResponse' 
+                                : 'Send Reminder to $noResponse ${noResponse == 1 ? 'Person' : 'People'}',
+                              style: TextStyle(fontSize: isVeryNarrow ? 11 : 14),
+                            ),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.blue,
+                              padding: EdgeInsets.symmetric(vertical: isVeryNarrow ? 6 : 10),
                             ),
                           ),
                         ),
@@ -402,29 +438,33 @@ class _EventCardState extends State<EventCard> {
     required Color color,
     required String label,
     required int count,
+    bool isNarrow = false,
   }) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        padding: EdgeInsets.symmetric(
+          vertical: isNarrow ? 4 : 8,
+          horizontal: isNarrow ? 2 : 4,
+        ),
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(isNarrow ? 6 : 8),
         ),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 4),
+            Icon(icon, color: color, size: isNarrow ? 16 : 20),
+            SizedBox(height: isNarrow ? 2 : 4),
             Text(
               '$count',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: isNarrow ? 14 : 16,
                 color: color,
               ),
             ),
             Text(
               label,
-              style: TextStyle(fontSize: 10, color: Colors.grey[700]),
+              style: TextStyle(fontSize: isNarrow ? 8 : 10, color: Colors.grey[700]),
             ),
           ],
         ),
