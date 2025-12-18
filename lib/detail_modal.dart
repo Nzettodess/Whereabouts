@@ -313,9 +313,12 @@ class _DetailModalState extends State<DetailModal> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(sheetContext).viewInsets.bottom),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             // Header with member name
             Container(
               padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
@@ -371,6 +374,8 @@ class _DetailModalState extends State<DetailModal> {
             ),
           ],
         ),
+       ),
+      ),
     );
   }
 
@@ -379,11 +384,14 @@ class _DetailModalState extends State<DetailModal> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.only(left: 16, top: 16, bottom: 16, right: 0),
       height: MediaQuery.of(context).size.height * 0.9,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      child: GestureDetector(
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        behavior: HitTestBehavior.opaque,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // Sticky Header Section
           Text(
             "Details for ${widget.date.toLocal().toString().split(' ')[0]}",
@@ -424,6 +432,8 @@ class _DetailModalState extends State<DetailModal> {
           if (widget.holidays.isNotEmpty) ...[
             const Text("Holidays", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
             ...widget.holidays.map((h) => ListTile(
+              contentPadding: const EdgeInsets.only(left: 16.0, right: 2.0),
+              visualDensity: VisualDensity.compact,
               leading: const Icon(Icons.star, color: Colors.red),
               title: Text(h.localName),
               subtitle: Text(h.countryCode),
@@ -440,6 +450,8 @@ class _DetailModalState extends State<DetailModal> {
               collapsedShape: const Border(),
               tilePadding: EdgeInsets.zero,
               children: widget.birthdays.map((b) => ListTile(
+                contentPadding: const EdgeInsets.only(left: 16.0, right: 2.0),
+                visualDensity: VisualDensity.compact,
                 leading: Icon(
                   b.isLunar ? Icons.nights_stay : Icons.cake, 
                   color: b.isLunar ? Colors.orange : Colors.green,
@@ -464,6 +476,8 @@ class _DetailModalState extends State<DetailModal> {
                children: widget.events.map((e) {
                final isOwner = e.creatorId == widget.currentUserId;
                return ListTile(
+                 contentPadding: const EdgeInsets.only(left: 16.0, right: 2.0),
+                 visualDensity: VisualDensity.compact,
                  onTap: () {
                    showDialog(
                      context: context,
@@ -565,11 +579,12 @@ class _DetailModalState extends State<DetailModal> {
 
                   trailing: Builder(builder: (context) {
                     final isNarrow = MediaQuery.of(context).size.width < 450;
-                    final iconSize = isNarrow ? 22.0 : 26.0;
-                    final btnSize = isNarrow ? 36.0 : 40.0;
+                    final iconSize = isNarrow ? 28.0 : 32.0;
+                    final btnSize = isNarrow ? 40.0 : 44.0;
                     
                     return Row(
                       mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         // Edit button
                         SizedBox(
@@ -717,7 +732,9 @@ class _DetailModalState extends State<DetailModal> {
                         return GestureDetector(
                           onTap: () => _showUserProfileDialog(element, user),
                           child: ListTile(
-                          leading: isPlaceholder
+                            contentPadding: const EdgeInsets.only(left: 16.0, right: 2.0),
+                            visualDensity: VisualDensity.compact,
+                            leading: isPlaceholder
                             ? CircleAvatar(
                                 backgroundColor: Colors.grey[300],
                                 child: const Icon(Icons.person_outline, color: Colors.grey),
@@ -736,11 +753,12 @@ class _DetailModalState extends State<DetailModal> {
                             : Text("${element.nation}${element.state != null && element.state!.isNotEmpty ? ', ${element.state}' : ''}"),
                           trailing: Builder(builder: (context) {
                             final isNarrow = MediaQuery.of(context).size.width < 450;
-                            final iconSize = isNarrow ? 20.0 : 24.0;
-                            final btnSize = isNarrow ? 34.0 : 38.0;
-                            final iconPadding = isNarrow ? 2.0 : 4.0;
+                            final iconSize = isNarrow ? 26.0 : 30.0;
+                            final btnSize = isNarrow ? 38.0 : 42.0;
+                            final iconPadding = isNarrow ? 1.0 : 2.0;
                             return Row(
                               mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                               // Edit for placeholder members (owner/admin only)
                               if (isPlaceholder && canEditPlaceholder) ...[
@@ -807,9 +825,12 @@ class _DetailModalState extends State<DetailModal> {
                                     final result = await showModalBottomSheet<bool>(
                                       context: context,
                                       isScrollControlled: true,
-                                      builder: (sheetContext) => Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
+                                      builder: (sheetContext) => Padding(
+                                        padding: EdgeInsets.only(bottom: MediaQuery.of(sheetContext).viewInsets.bottom),
+                                        child: SingleChildScrollView(
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
                                             // Header with member name
                                             Container(
                                               padding: const EdgeInsets.fromLTRB(20, 16, 8, 0),
@@ -851,6 +872,8 @@ class _DetailModalState extends State<DetailModal> {
                                             ),
                                           ],
                                         ),
+                                       ),
+                                      ),
                                     );
                                     if (result == true && mounted) {
                                       Navigator.pop(context); // Refresh detail modal
@@ -938,14 +961,15 @@ class _DetailModalState extends State<DetailModal> {
             );
           },
         ),
-        ],
-      ),
-      ),
-      ),
-        ],
-      ),
-    );
-  }
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  ),
+);
+}
 
 
   void _showUserProfileDialog(UserLocation location, Map<String, dynamic>? userData) async {

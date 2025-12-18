@@ -146,88 +146,98 @@ class _AddEventModalState extends State<AddEventModal> {
   Widget build(BuildContext context) {
     final isEditing = widget.eventToEdit != null;
     
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              isEditing ? "Edit Event" : "Schedule Event", 
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _titleController,
-              decoration: const InputDecoration(labelText: "Event Title"),
-              validator: (value) => value!.isEmpty ? "Required" : null,
-            ),
-            TextFormField(
-              controller: _descController,
-              decoration: const InputDecoration(labelText: "Description"),
-              minLines: 1,
-              maxLines: 5,
-              keyboardType: TextInputType.multiline,
-            ),
-            TextFormField(
-              controller: _venueController,
-              decoration: const InputDecoration(
-                labelText: "Venue (Optional)",
-                hintText: "Enter event location",
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: EdgeInsets.only(
+          top: 16, left: 16, right: 16,
+          bottom: 16 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Text("Date: "),
-                TextButton(
-                  onPressed: _pickDate,
-                  child: Text(DateFormat('yyyy-MM-dd').format(_selectedDate)),
+              Text(
+                isEditing ? "Edit Event" : "Schedule Event", 
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _titleController,
+                decoration: const InputDecoration(labelText: "Event Title"),
+                validator: (value) => value!.isEmpty ? "Required" : null,
+              ),
+              TextFormField(
+                controller: _descController,
+                decoration: const InputDecoration(labelText: "Description"),
+                minLines: 1,
+                maxLines: 5,
+                keyboardType: TextInputType.multiline,
+              ),
+              TextFormField(
+                controller: _venueController,
+                decoration: const InputDecoration(
+                  labelText: "Venue (Optional)",
+                  hintText: "Enter event location",
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              title: const Text("Include Time"),
-              value: _hasTime,
-              onChanged: (value) {
-                setState(() {
-                  _hasTime = value;
-                });
-              },
-            ),
-            if (_hasTime)
+              ),
+              const SizedBox(height: 16),
               Row(
                 children: [
-                  const Text("Time: "),
+                  const Text("Date: "),
                   TextButton(
-                    onPressed: _pickTime,
-                    child: Text(_selectedTime.format(context)),
+                    onPressed: _pickDate,
+                    child: Text(DateFormat('yyyy-MM-dd').format(_selectedDate)),
                   ),
                 ],
               ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _selectedGroupId,
-              decoration: const InputDecoration(labelText: "Group"),
-              items: _userGroups.map((g) => DropdownMenuItem(
-                value: g.id,
-                child: Text(g.name),
-              )).toList(),
-              onChanged: (value) {
-                setState(() {
-                  _selectedGroupId = value;
-                });
-              },
-              validator: (value) => value == null ? "Select a group" : null,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _saveEvent,
-              child: Text(isEditing ? "Save Changes" : "Create Event"),
-            ),
-          ],
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: const Text("Include Time"),
+                value: _hasTime,
+                onChanged: (value) {
+                  setState(() {
+                    _hasTime = value;
+                  });
+                },
+              ),
+              if (_hasTime)
+                Row(
+                  children: [
+                    const Text("Time: "),
+                    TextButton(
+                      onPressed: _pickTime,
+                      child: Text(_selectedTime.format(context)),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedGroupId,
+                decoration: const InputDecoration(labelText: "Group"),
+                items: _userGroups.map((g) => DropdownMenuItem(
+                  value: g.id,
+                  child: Text(g.name),
+                )).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedGroupId = value;
+                  });
+                },
+                validator: (value) => value == null ? "Select a group" : null,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _saveEvent,
+                child: Text(isEditing ? "Save Changes" : "Create Event"),
+              ),
+            ],
+          ),
+          ),
         ),
       ),
     );

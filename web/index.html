@@ -172,6 +172,249 @@
     <div class="skeleton-text"></div>
   </div>
 
+  <!-- PWA Install Prompt Banner -->
+  <style>
+    #pwa-install-banner {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(135deg, #673AB7, #9C27B0);
+      color: white;
+      padding: 16px 20px;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+      z-index: 10000;
+      animation: slideUp 0.3s ease-out;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateY(100%);
+      }
+
+      to {
+        transform: translateY(0);
+      }
+    }
+
+    #pwa-install-banner .banner-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    #pwa-install-banner .app-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      flex-shrink: 0;
+    }
+
+    #pwa-install-banner .banner-text {
+      flex: 1;
+    }
+
+    #pwa-install-banner .banner-title {
+      font-weight: 600;
+      font-size: 16px;
+      margin-bottom: 2px;
+    }
+
+    #pwa-install-banner .banner-subtitle {
+      font-size: 13px;
+      opacity: 0.9;
+    }
+
+    #pwa-install-banner .install-btn {
+      background: white;
+      color: #673AB7;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 24px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    #pwa-install-banner .close-btn {
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px 8px;
+      opacity: 0.7;
+    }
+
+    #pwa-install-banner .close-btn:hover {
+      opacity: 1;
+    }
+
+    /* iOS instructions modal */
+    #ios-install-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 10001;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    #ios-install-modal .modal-content {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 320px;
+      text-align: center;
+      color: #333;
+    }
+
+    #ios-install-modal h3 {
+      margin: 0 0 16px;
+    }
+
+    #ios-install-modal .step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 12px 0;
+      text-align: left;
+    }
+
+    #ios-install-modal .step-icon {
+      font-size: 24px;
+      width: 32px;
+    }
+
+    #ios-install-modal .close-modal {
+      margin-top: 16px;
+      background: #673AB7;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 24px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+  </style>
+
+  <div id="pwa-install-banner">
+    <div class="banner-content">
+      <img src="icons/Icon-192.png" alt="Orbit" class="app-icon">
+      <div class="banner-text">
+        <div class="banner-title">Install Orbit</div>
+        <div class="banner-subtitle">Add to home screen for quick access</div>
+      </div>
+      <button class="install-btn" id="pwa-install-btn">Install</button>
+      <button class="close-btn" id="pwa-close-btn">&times;</button>
+    </div>
+  </div>
+
+  <div id="ios-install-modal">
+    <div class="modal-content">
+      <h3>Install Orbit</h3>
+      <div class="step">
+        <span class="step-icon">📤</span>
+        <span>Tap the <strong>Share</strong> button below</span>
+      </div>
+      <div class="step">
+        <span class="step-icon">➕</span>
+        <span>Scroll and tap <strong>"Add to Home Screen"</strong></span>
+      </div>
+      <div class="step">
+        <span class="step-icon">✅</span>
+        <span>Tap <strong>"Add"</strong> to install</span>
+      </div>
+      <button class="close-modal" id="ios-close-modal">Got it!</button>
+    </div>
+  </div>
+
+  <script>
+    // PWA Install Prompt Logic
+    (function () {
+      let deferredPrompt = null;
+      const banner = document.getElementById('pwa-install-banner');
+      const installBtn = document.getElementById('pwa-install-btn');
+      const closeBtn = document.getElementById('pwa-close-btn');
+      const iosModal = document.getElementById('ios-install-modal');
+      const iosCloseModal = document.getElementById('ios-close-modal');
+
+      // Check if already installed
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+      const dismissed = localStorage.getItem('pwa-install-dismissed');
+
+      // Detect iOS
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      // Detect mobile
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+      if (isStandalone || dismissed || !isMobile) {
+        return; // Already installed, dismissed, or not mobile
+      }
+
+      // Capture beforeinstallprompt for Android/Chrome
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        banner.style.display = 'block';
+      });
+
+      // Show banner for iOS after short delay
+      if (isIOS) {
+        setTimeout(function () {
+          banner.style.display = 'block';
+        }, 3000);
+      }
+
+      // Install button click
+      installBtn.addEventListener('click', function () {
+        if (deferredPrompt) {
+          // Android - trigger native prompt
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then(function (result) {
+            if (result.outcome === 'accepted') {
+              banner.style.display = 'none';
+            }
+            deferredPrompt = null;
+          });
+        } else if (isIOS) {
+          // iOS - show instructions modal
+          iosModal.style.display = 'flex';
+        }
+      });
+
+      // Close banner
+      closeBtn.addEventListener('click', function () {
+        banner.style.display = 'none';
+        localStorage.setItem('pwa-install-dismissed', 'true');
+      });
+
+      // Close iOS modal
+      iosCloseModal.addEventListener('click', function () {
+        iosModal.style.display = 'none';
+        banner.style.display = 'none';
+        localStorage.setItem('pwa-install-dismissed', 'true');
+      });
+
+      // Close modal on backdrop click
+      iosModal.addEventListener('click', function (e) {
+        if (e.target === iosModal) {
+          iosModal.style.display = 'none';
+        }
+      });
+    })();
+  </script>
+
   <script src="flutter_bootstrap.js" async></script>
 </body>
 

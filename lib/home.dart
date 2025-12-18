@@ -97,11 +97,24 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
   @override
   void didChangeMetrics() {
     super.didChangeMetrics();
-    // Detect when keyboard closes and unfocus to properly reset UI
+    // Use both viewInsets and platformDispatcher for better compatibility across platforms (App/Web)
     final keyboardHeight = WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom;
+    
+    // If keyboard was present and is now gone
     if (_previousKeyboardHeight > 0 && keyboardHeight == 0) {
-      // Keyboard was open, now closed - unfocus
-      FocusManager.instance.primaryFocus?.unfocus();
+      // Small delay to let the OS/Browser finish its transition
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          // Force unfocus to ensure focus-related UI shifts are cleared
+          FocusManager.instance.primaryFocus?.unfocus();
+          // Safety: specifically unfocus any active text field if keyboard is gone
+          if (keyboardHeight == 0) {
+            FocusScope.of(context).unfocus();
+          }
+          // Force a rebuild to reset any MediaQuery dependent values
+          setState(() {});
+        }
+      });
     }
     _previousKeyboardHeight = keyboardHeight;
   }
