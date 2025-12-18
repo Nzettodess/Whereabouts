@@ -579,8 +579,8 @@ class _DetailModalState extends State<DetailModal> {
 
                   trailing: Builder(builder: (context) {
                     final isNarrow = MediaQuery.of(context).size.width < 450;
-                    final iconSize = isNarrow ? 28.0 : 32.0;
-                    final btnSize = isNarrow ? 40.0 : 44.0;
+                    final iconSize = isNarrow ? 24.0 : 28.0;
+                    final btnSize = isNarrow ? 36.0 : 40.0;
                     
                     return Row(
                       mainAxisSize: MainAxisSize.min,
@@ -753,8 +753,8 @@ class _DetailModalState extends State<DetailModal> {
                             : Text("${element.nation}${element.state != null && element.state!.isNotEmpty ? ', ${element.state}' : ''}"),
                           trailing: Builder(builder: (context) {
                             final isNarrow = MediaQuery.of(context).size.width < 450;
-                            final iconSize = isNarrow ? 26.0 : 30.0;
-                            final btnSize = isNarrow ? 38.0 : 42.0;
+                            final iconSize = isNarrow ? 22.0 : 26.0;
+                            final btnSize = isNarrow ? 34.0 : 38.0;
                             final iconPadding = isNarrow ? 1.0 : 2.0;
                             return Row(
                               mainAxisSize: MainAxisSize.min,
