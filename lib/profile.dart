@@ -47,10 +47,12 @@ class _ProfileDialogState extends State<ProfileDialog> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Container(
           width: 400,
-          padding: EdgeInsets.only(
-            top: 20, left: 20, right: 20,
-            bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+          // Use a bounded height to prevent squashing during keyboard events
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+            minHeight: 200,
           ),
+          padding: const EdgeInsets.all(20.0),
         child: StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance.collection('users').doc(widget.user.uid).snapshots(),
           builder: (context, snapshot) {
@@ -62,6 +64,7 @@ class _ProfileDialogState extends State<ProfileDialog> {
             final photoUrl = data?['photoURL'];
 
             return SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: Column(
                 mainAxisSize: MainAxisSize.min,

@@ -64,9 +64,7 @@
 
     /* PWA Keyboard/Viewport Fix: Force height to fill dynamic viewport */
     html,
-    body,
-    flt-glass-pane,
-    flt-scene-host {
+    body {
       height: 100dvh !important;
       width: 100vw !important;
       margin: 0;
@@ -74,6 +72,19 @@
       overflow: hidden !important;
       position: fixed;
       /* Stop layout shifting */
+      top: 0;
+      left: 0;
+    }
+
+    flt-glass-pane,
+    flt-scene-host {
+      height: 100dvh !important;
+      width: 100vw !important;
+      margin: 0;
+      padding: 0;
+      overflow: hidden !important;
+      position: fixed !important;
+      /* Force stability */
       top: 0;
       left: 0;
     }
@@ -432,19 +443,23 @@
     })();
 
     // Robust Keyboard Dismissal Fix for Flutter PWA
-    // This forces the layout viewport to snap back when the virtual keyboard is hidden
+    // Using initialHeight tracking for precise recovery
     if (window.visualViewport) {
+      const initialHeight = window.visualViewport.height;
+
       window.visualViewport.addEventListener('resize', () => {
-        // Detect if viewport returned to full size (keyboard hidden)
-        if (window.visualViewport.height >= window.innerHeight * 0.9) {
+        const currentHeight = window.visualViewport.height;
+
+        // If height returned to > 95% of initial, keyboard is highly likely gone
+        if (currentHeight >= initialHeight * 0.95) {
           // Reinforced "Quad-Kick" reset
           setTimeout(() => {
             window.scrollTo(0, 0);
             document.body.scrollTop = 0;
-            // Kick 1: Layout shift
+            // Kick 1: Layout shift to trigger browser reflow
             window.scrollBy(0, 1);
             window.scrollBy(0, -1);
-            // Kick 2: Trigger Flutter's internal metrics logic
+            // Kick 2: Force Flutter to re-read window metrics
             window.dispatchEvent(new Event('resize'));
             // Kick 3: Visual Viewport specific trigger
             if (window.visualViewport.dispatchEvent) {
