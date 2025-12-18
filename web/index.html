@@ -23,7 +23,8 @@
     content="Orbit: Keep your world in sync. A location and calendar coordination app for groups.">
 
   <!-- Viewport for mobile responsiveness (CRITICAL for PWA) -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, interactive-widget=resizes-content">
 
   <!-- Theme color for browser chrome (supports dark/light mode) -->
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#673AB7">
@@ -413,6 +414,22 @@
         }
       });
     })();
+
+    // Robust Keyboard Dismissal Fix for Flutter PWA
+    // This forces the layout viewport to snap back when the virtual keyboard is hidden
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        // Detect if viewport returned to full size (keyboard hidden)
+        // We use 0.9 as a threshold to account for address bar shifts
+        if (window.visualViewport.height >= window.innerHeight * 0.9) {
+          // Small delay to ensure the OS has finished animating the keyboard disappearance
+          setTimeout(() => {
+            window.scrollTo(0, 0);
+            document.body.scrollTop = 0;
+          }, 100);
+        }
+      });
+    }
   </script>
 
   <script src="flutter_bootstrap.js" async></script>
