@@ -764,6 +764,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> {
     final loggedIn = _user != null;
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent, // Glassmorphism base
