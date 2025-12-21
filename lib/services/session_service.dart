@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 class SessionService {
   final String userId;
   final String sessionId = const Uuid().v4();
+  String get currentSessionId => sessionId;
   Timer? _heartbeatTimer;
   StreamSubscription? _sessionListener;
   StreamSubscription? _terminationListener;

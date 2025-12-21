@@ -70,7 +70,10 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
   
   // Session service for multi-device detection
   SessionService? _sessionService;
-  bool _hasShownMultiSessionWarning = false;
+  Set<String> _knownSessionIds = {};
+  final ValueNotifier<List<Map<String, dynamic>>> _sessionsNotifier = ValueNotifier([]);
+  bool _silenceMultiSessionWarning = false;
+  bool _isMultiSessionWarningOpen = false;
   bool _isSessionTerminated = false;
   
   // Offline status for persistent banner
@@ -138,12 +141,29 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
   
   void _startSessionTracking(String userId) {
     _sessionService = SessionService(userId);
-    _hasShownMultiSessionWarning = false;
+    _knownSessionIds = {};
+    _silenceMultiSessionWarning = false;
     _sessionService?.startSession(
       onMultipleSessions: (sessions) {
-        if (!_hasShownMultiSessionWarning && mounted) {
-          _hasShownMultiSessionWarning = true;
-          _showMultiSessionWarning(sessions);
+        if (mounted) {
+          final currentSessionId = _sessionService?.currentSessionId;
+          final sessionIds = sessions.map((s) => s['id'] as String).toSet();
+          
+          // Identify "new" session IDs (IDs present in current stream but not in _knownSessionIds)
+          final newSessionIds = sessionIds.difference(_knownSessionIds);
+          
+          // Always update the notifier so open dialogs see current data
+          _sessionsNotifier.value = sessions;
+          
+          final hasRealNewSessions = newSessionIds.any((id) => id != currentSessionId);
+
+          // Only trigger warning if silenced is false, has new sessions, not already open, AND count > 1
+          if (!_silenceMultiSessionWarning && hasRealNewSessions && !_isMultiSessionWarningOpen && sessions.length > 1) {
+            _showMultiSessionWarning();
+          }
+          
+          // Always update the known IDs
+          _knownSessionIds = sessionIds;
         }
       },
       onSessionTerminated: () {
@@ -249,99 +269,163 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
     return true;
   }
   
-  void _showMultiSessionWarning(List<Map<String, dynamic>> sessions) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(children: [
-          Icon(Icons.info_outline, color: Colors.blue[700], size: 22),
-          const SizedBox(width: 8),
-          const Flexible(child: Text('Multiple Sessions', overflow: TextOverflow.ellipsis)),
-        ]),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 300, maxWidth: 300),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'You are logged in on multiple devices or tabs.',
-                  style: TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning_amber_rounded, color: Colors.orange[700], size: 18),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'This may cause data sync conflicts.',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text('Sessions (${sessions.length}):', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
-                const SizedBox(height: 6),
-                ...sessions.take(5).map((s) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(children: [
-                    Icon(
-                      Icons.circle,
-                      size: 6,
-                      color: s['isCurrentSession'] == true ? Colors.green : Colors.grey,
+  void _showMultiSessionWarning() {
+    _isMultiSessionWarningOpen = true;
+    
+    // Using a slightly longer delay (500ms) on Web to avoid engine/window.dart assertions
+    // which happen when dialogs are shown before window metrics have settled.
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted) {
+        _isMultiSessionWarningOpen = false;
+        return;
+      }
+      
+      showDialog(
+        context: context,
+        builder: (context) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Row(children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange[700], size: 22),
+              const SizedBox(width: 8),
+              const Flexible(child: Text('Multiple Sessions', overflow: TextOverflow.ellipsis)),
+            ]),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 400, maxWidth: 300),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'You are logged in on multiple devices or tabs.',
+                      style: TextStyle(fontSize: 14),
                     ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        '${s['device']}${s['isCurrentSession'] == true ? ' (current)' : ''}',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: s['isCurrentSession'] == true ? FontWeight.w500 : FontWeight.normal,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.orange[700], size: 18),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'This may cause data sync conflicts.',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ]),
-                )),
-                if (sessions.length > 5)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text('...and ${sessions.length - 5} more', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                  ),
-              ],
+                    const SizedBox(height: 12),
+                    ValueListenableBuilder<List<Map<String, dynamic>>>(
+                      valueListenable: _sessionsNotifier,
+                      builder: (context, currentSessions, _) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Sessions (${currentSessions.length}):', 
+                              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+                            const SizedBox(height: 6),
+                            ...currentSessions.take(5).map((s) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 3),
+                              child: Row(children: [
+                                Icon(
+                                  Icons.circle,
+                                  size: 6,
+                                  color: s['isCurrentSession'] == true ? Colors.green : Colors.grey,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    '${s['device']}${s['isCurrentSession'] == true ? ' (current)' : ''}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: s['isCurrentSession'] == true ? FontWeight.w500 : FontWeight.normal,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ]),
+                            )),
+                            if (currentSessions.length > 5)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text('...and ${currentSessions.length - 5} more', 
+                                  style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                              ),
+                          ],
+                        );
+                      }
+                    ),
+                    
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    
+                    // Silent checkbox
+                    InkWell(
+                      onTap: () {
+                        setDialogState(() {
+                          _silenceMultiSessionWarning = !_silenceMultiSessionWarning;
+                        });
+                      },
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: Checkbox(
+                              value: _silenceMultiSessionWarning,
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  _silenceMultiSessionWarning = val ?? false;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              "Don't show again for this session",
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  await _sessionService?.terminateOtherSessions();
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Other sessions terminated')),
+                    );
+                  }
+                },
+                child: Text('Terminate others', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await _sessionService?.terminateOtherSessions();
-              if (mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Other sessions terminated')),
-                );
-              }
-            },
-            child: Text('Terminate others', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Got it'),
-          ),
-        ],
-      ),
-    );
+      ).then((_) {
+        _isMultiSessionWarningOpen = false;
+      });
+    });
   }
   
   @override
