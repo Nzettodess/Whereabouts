@@ -19,6 +19,7 @@ class HomeCalendar extends StatefulWidget {
   final Function(String, DateTime) onMonthChanged;
   final String currentUserId;
   final DateTime currentViewMonth;
+  final bool canWrite; // Whether write operations are allowed (false if session terminated)
 
   const HomeCalendar({
     super.key,
@@ -33,6 +34,7 @@ class HomeCalendar extends StatefulWidget {
     required this.onMonthChanged,
     required this.currentUserId,
     required this.currentViewMonth,
+    this.canWrite = true, // Default to true for backwards compatibility
   });
 
   @override
@@ -782,6 +784,7 @@ class _HomeCalendarState extends State<HomeCalendar> {
                 holidays: dayHolidays,
                 birthdays: dayBirthdays,
                 currentUserId: widget.currentUserId,
+                canWrite: widget.canWrite,
               ),
             );
           }

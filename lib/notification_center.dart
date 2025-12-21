@@ -6,8 +6,13 @@ import 'widgets/skeleton_loading.dart';
 
 class NotificationCenter extends StatefulWidget {
   final String currentUserId;
+  final bool canWrite;
 
-  const NotificationCenter({super.key, required this.currentUserId});
+  const NotificationCenter({
+    super.key, 
+    required this.currentUserId,
+    this.canWrite = true,
+  });
 
   @override
   State<NotificationCenter> createState() => _NotificationCenterState();
@@ -76,7 +81,7 @@ class _NotificationCenterState extends State<NotificationCenter> {
                           DateFormat('yyyy-MM-dd HH:mm').format(notification.timestamp),
                         ),
                         onTap: () {
-                          if (!notification.read) {
+                          if (widget.canWrite && !notification.read) {
                             _firestoreService.markNotificationRead(notification.id);
                           }
                         },

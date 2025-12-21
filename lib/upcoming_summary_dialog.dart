@@ -17,6 +17,7 @@ class UpcomingSummaryDialog extends StatefulWidget {
   final List<PlaceholderMember> placeholderMembers;
   final Map<String, String> groupNames; // groupId -> groupName
   final void Function(DateTime date)? onDateTap; // Callback for opening date detail
+  final bool canWrite; // Whether write operations are allowed (false if session terminated)
 
   const UpcomingSummaryDialog({
     super.key,
@@ -28,6 +29,7 @@ class UpcomingSummaryDialog extends StatefulWidget {
     required this.placeholderMembers,
     required this.groupNames,
     this.onDateTap,
+    this.canWrite = true, // Default to true for backwards compatibility
   });
 
   @override
@@ -37,6 +39,34 @@ class UpcomingSummaryDialog extends StatefulWidget {
 class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
   // Filter state
   UpcomingItemType? _selectedFilter; // null means "All"
+  
+  /// Check if writes are allowed, show dialog if not
+  bool _checkCanWrite() {
+    if (!widget.canWrite) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(children: [
+            Icon(Icons.block, color: Colors.red[700], size: 22),
+            const SizedBox(width: 8),
+            const Text('Read-Only Mode'),
+          ]),
+          content: const Text(
+            'This session was terminated. You cannot make changes.\n\nClick "Resume" in the banner to start a new session.',
+            style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+    return true;
+  }
   
   // Infinite scroll state
   int _daysToShow = 60; // Start with 60 days
@@ -523,6 +553,7 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
               icon: const Icon(Icons.edit, color: Colors.blue),
               tooltip: 'Edit Event',
               onPressed: () {
+                if (!_checkCanWrite()) return;
                 Navigator.pop(context); // Close event detail
                 Navigator.pop(this.context); // Close upcoming summary
                 // Show edit modal

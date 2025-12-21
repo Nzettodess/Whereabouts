@@ -9,7 +9,9 @@ class SessionService {
   final String sessionId = const Uuid().v4();
   Timer? _heartbeatTimer;
   StreamSubscription? _sessionListener;
+  StreamSubscription? _terminationListener;
   bool _isActive = false;
+  Function()? _onTerminated;
 
   SessionService(this.userId);
 
@@ -23,9 +25,11 @@ class SessionService {
   /// Start tracking this session
   Future<void> startSession({
     required Function(List<Map<String, dynamic>> sessions) onMultipleSessions,
+    Function()? onSessionTerminated,
   }) async {
     if (_isActive) return;
     _isActive = true;
+    _onTerminated = onSessionTerminated;
 
     print('[SessionService] Starting session: $sessionId');
 
@@ -46,6 +50,19 @@ class SessionService {
       return;
     }
 
+    // Listen for THIS session being deleted (terminated by another device)
+    _terminationListener = _sessionRef.snapshots().listen(
+      (snapshot) {
+        if (!snapshot.exists && _isActive) {
+          print('[SessionService] This session was terminated by another device!');
+          _isActive = false;
+          _heartbeatTimer?.cancel();
+          _onTerminated?.call();
+        }
+      },
+      onError: (e) => print('[SessionService] Termination listener error: $e'),
+    );
+
     // Heartbeat every 30 seconds
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
       if (_isActive) {
@@ -57,9 +74,11 @@ class SessionService {
       }
     });
 
-    // Listen for other sessions
+    // Listen for other sessions (for multi-session warning)
     _sessionListener = _sessionsCollection.snapshots().listen(
       (snapshot) {
+        if (!_isActive) return;
+        
         final now = DateTime.now();
         final activeSessions = <Map<String, dynamic>>[];
         
@@ -141,6 +160,8 @@ class SessionService {
     _heartbeatTimer = null;
     await _sessionListener?.cancel();
     _sessionListener = null;
+    await _terminationListener?.cancel();
+    _terminationListener = null;
     
     try {
       await _sessionRef.delete();

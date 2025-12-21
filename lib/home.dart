@@ -71,6 +71,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
   // Session service for multi-device detection
   SessionService? _sessionService;
   bool _hasShownMultiSessionWarning = false;
+  bool _isSessionTerminated = false;
   
   // Offline status for persistent banner
   bool _isOffline = false;
@@ -145,12 +146,107 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
           _showMultiSessionWarning(sessions);
         }
       },
+      onSessionTerminated: () {
+      if (mounted) {
+        // Clear navigation stack (close all dialogs/sheets)
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        _showSessionTerminatedDialog();
+      }
+    },
+    );
+  }
+  
+  void _showSessionTerminatedDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Row(children: [
+          Icon(Icons.cancel_outlined, color: Colors.orange[700], size: 22),
+          const SizedBox(width: 8),
+          const Flexible(child: Text('Session Terminated')),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This session was terminated from another device.',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'You can safely close this tab. If you continue, a new session will be created which may conflict with other active sessions.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Show terminated banner
+              setState(() => _isSessionTerminated = true);
+            },
+            child: Text('Close Tab', style: TextStyle(color: Colors.grey[600])),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Clear terminated state and start new session
+              setState(() => _isSessionTerminated = false);
+              if (_user != null) {
+                _startSessionTracking(_user!.uid);
+              }
+            },
+            child: const Text('Continue Anyway'),
+          ),
+        ],
+      ),
     );
   }
   
   void _endSessionTracking() {
     _sessionService?.endSession();
     _sessionService = null;
+  }
+  
+  /// Check if writes are allowed (session is active)
+  bool get _canWrite => !_isSessionTerminated;
+  
+  /// Show dialog when write is blocked and return false
+  bool _checkCanWrite() {
+    if (_isSessionTerminated) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(children: [
+            Icon(Icons.block, color: Colors.red[700], size: 22),
+            const SizedBox(width: 8),
+            const Text('Read-Only Mode'),
+          ]),
+          content: const Text(
+            'This session was terminated. You cannot make changes.\n\nClick "Resume" in the banner to start a new session.',
+            style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+    return true;
   }
   
   void _showMultiSessionWarning(List<Map<String, dynamic>> sessions) {
@@ -237,7 +333,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
                 );
               }
             },
-            child: Text('Log out others', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+            child: Text('Terminate others', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -653,6 +749,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
   }
 
   void _openAddEventModal() {
+    if (!_checkCanWrite()) return;
     if (_user != null) {
       showModalBottomSheet(
         context: context,
@@ -687,6 +784,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
         allUsers: _allUsers,
         placeholderMembers: _placeholderMembers,
         groupNames: groupNames,
+        canWrite: _canWrite,
         onDateTap: (date) {
           // Get data for the selected date
           final dayLocations = _getLocationsForDate(date);
@@ -707,6 +805,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
               holidays: dayHolidays,
               birthdays: dayBirthdays,
               currentUserId: _user!.uid,
+              canWrite: _canWrite,
             ),
           );
         },
@@ -732,6 +831,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
   }
 
   void _openLocationPicker() async {
+    if (!_checkCanWrite()) return;
     if (_user == null) return;
     
     // Check if user has any groups or placeholders to manage
@@ -990,7 +1090,10 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
               onPressed: () {
                 showDialog(
                   context: context,
-                  builder: (context) => NotificationCenter(currentUserId: _user!.uid),
+                  builder: (context) => NotificationCenter(
+                    currentUserId: _user!.uid,
+                    canWrite: _canWrite,
+                  ),
                 );
               },
             ),
@@ -998,6 +1101,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
               padding: const EdgeInsets.only(right: 16.0, left: 8.0),
               child: GestureDetector(
                 onTap: () {
+                  if (!_checkCanWrite()) return;
                   showDialog(
                     context: context,
                     builder: (_) => ProfileDialog(user: _user!),
@@ -1033,12 +1137,14 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
               user: _user,
               photoUrl: _photoUrl,
               onProfileTap: () {
+                if (!_checkCanWrite()) return;
                 showDialog(
                   context: context,
                   builder: (_) => ProfileDialog(user: _user!),
                 );
               },
               onManageGroupsTap: () {
+                if (!_checkCanWrite()) return;
                 showDialog(
                   context: context,
                   builder: (context) => const GroupManagementDialog(),
@@ -1048,6 +1154,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
               onBirthdayBabyTap: _openBirthdayBabyDialog,
 
               onRSVPManagementTap: () {
+                if (!_checkCanWrite()) return;
                 showDialog(
                   context: context,
                   builder: (context) => RSVPManagementDialog(
@@ -1056,6 +1163,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
                 );
               },
               onSettingsTap: () {
+                if (!_checkCanWrite()) return;
                 if (_user != null) {
                   showDialog(
                     context: context,
@@ -1094,9 +1202,45 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
                 ),
               ),
             ),
+          // Session terminated banner
+          if (_isSessionTerminated)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + kToolbarHeight + (_isOffline ? 40 : 0),
+              left: 0,
+              right: 0,
+              child: Container(
+                color: Colors.grey[700],
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.cancel_outlined, color: Colors.white, size: 18),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Session terminated. You can safely close this tab.',
+                        style: TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() => _isSessionTerminated = false);
+                        if (_user != null) {
+                          _startSessionTracking(_user!.uid);
+                        }
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: Size.zero,
+                      ),
+                      child: const Text('Resume', style: TextStyle(color: Colors.white, fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Padding(
             padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + kToolbarHeight + 16 + (_isOffline ? 40 : 0), // Add space for banner
+              top: MediaQuery.of(context).padding.top + kToolbarHeight + 16 + (_isOffline ? 40 : 0) + (_isSessionTerminated ? 40 : 0),
             ),
             child: Column(
             children: [
@@ -1204,6 +1348,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
                     religiousCalendars: _religiousCalendars,
                     currentUserId: _user?.uid ?? '',
                     currentViewMonth: _currentViewMonth,
+                    canWrite: _canWrite,
                     onMonthChanged: (title, date) {
                       setState(() {
                         _currentMonthTitle = title;

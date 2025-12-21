@@ -21,6 +21,7 @@ class DetailModal extends StatefulWidget {
   final List<Holiday> holidays;
   final List<Birthday> birthdays;
   final String currentUserId;
+  final bool canWrite; // Whether write operations are allowed (false if session terminated)
 
   const DetailModal({
     super.key,
@@ -30,6 +31,7 @@ class DetailModal extends StatefulWidget {
     required this.holidays,
     required this.birthdays,
     required this.currentUserId,
+    this.canWrite = true, // Default to true for backwards compatibility
   });
 
   @override
@@ -68,8 +70,34 @@ class _DetailModalState extends State<DetailModal> {
     _loadGroupNames();
     _loadManageableMembers();
   }
-
-
+  
+  /// Check if writes are allowed, show dialog if not
+  bool _checkCanWrite() {
+    if (!widget.canWrite) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(children: [
+            Icon(Icons.block, color: Colors.red[700], size: 22),
+            const SizedBox(width: 8),
+            const Text('Read-Only Mode'),
+          ]),
+          content: const Text(
+            'This session was terminated. You cannot make changes.\n\nClick "Resume" in the banner to start a new session.',
+            style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return false;
+    }
+    return true;
+  }
   /// Deduplicates locations by userId - each user appears only once.
   /// Priority: explicit location > default location > "No location selected"
   /// Preserves original groupId for edit/delete operations.
@@ -232,6 +260,7 @@ class _DetailModalState extends State<DetailModal> {
   }
 
   Future<void> _togglePin(String userId) async {
+    if (!_checkCanWrite()) return;
     List<String> newPinned = List.from(_pinnedMembers);
     if (newPinned.contains(userId)) {
       newPinned.remove(userId);
@@ -263,6 +292,7 @@ class _DetailModalState extends State<DetailModal> {
 
   // Delete placeholder member location
   Future<void> _deletePlaceholderLocation(UserLocation element) async {
+    if (!_checkCanWrite()) return;
     // Check if placeholder has a default location
     final placeholderDoc = await FirebaseFirestore.instance
         .collection('placeholder_members')
@@ -307,6 +337,7 @@ class _DetailModalState extends State<DetailModal> {
   }
 
   Future<void> _editPlaceholderLocation(UserLocation element) async {
+    if (!_checkCanWrite()) return;
     final userData = _userDetails[element.userId] ?? {};
     final placeholderName = userData['displayName'] ?? 'Placeholder';
     
@@ -596,6 +627,7 @@ class _DetailModalState extends State<DetailModal> {
                             tooltip: 'Edit',
                             padding: EdgeInsets.zero,
                             onPressed: () {
+                              if (!_checkCanWrite()) return;
                               Navigator.pop(context);
                               showModalBottomSheet(
                                 context: context,
@@ -631,6 +663,7 @@ class _DetailModalState extends State<DetailModal> {
                               tooltip: 'Delete',
                               padding: EdgeInsets.zero,
                               onPressed: () async {
+                                if (!_checkCanWrite()) return;
                                 await _firestoreService.deleteEvent(e.id);
                                 if (mounted) Navigator.pop(context);
                               },
@@ -645,6 +678,7 @@ class _DetailModalState extends State<DetailModal> {
                             tooltip: 'RSVP Stats',
                             padding: EdgeInsets.zero,
                             onPressed: () {
+                              if (!_checkCanWrite()) return;
                               showDialog(
                                 context: context,
                                 builder: (context) => RSVPManagementDialog(
@@ -662,7 +696,10 @@ class _DetailModalState extends State<DetailModal> {
                             icon: Icon(Icons.how_to_reg, color: Colors.green, size: iconSize),
                             tooltip: 'RSVP',
                             padding: EdgeInsets.zero,
-                            onPressed: () => _showRSVPDialog(e),
+                            onPressed: () {
+                              if (!_checkCanWrite()) return;
+                              _showRSVPDialog(e);
+                            },
                           ),
                         ),
                       ],
@@ -790,6 +827,7 @@ class _DetailModalState extends State<DetailModal> {
                                   padding: EdgeInsets.all(iconPadding),
                                   constraints: BoxConstraints(minWidth: iconSize + 8, minHeight: iconSize + 8),
                                   onPressed: () async {
+                                    if (!_checkCanWrite()) return;
                                     // Target user for editing
                                     final targetUserId = element.userId;
                                     final targetName = isCurrentUser ? "Myself" : name;
@@ -891,6 +929,7 @@ class _DetailModalState extends State<DetailModal> {
                                   padding: EdgeInsets.all(iconPadding),
                                   constraints: BoxConstraints(minWidth: iconSize + 8, minHeight: iconSize + 8),
                                   onPressed: () async {
+                                    if (!_checkCanWrite()) return;
                                     final targetUserId = element.userId;
                                     final targetName = _userDetails[targetUserId]?['displayName'] ?? 'this member';
                                     
@@ -1017,6 +1056,7 @@ class _DetailModalState extends State<DetailModal> {
         lunarBirthdayMonth: userData?['lunarBirthdayMonth'],
         lunarBirthdayDay: userData?['lunarBirthdayDay'],
         onEdit: () {
+          if (!_checkCanWrite()) return;
           if (isPlaceholder) {
             _editPlaceholderLocation(location);
           } else {
@@ -1145,7 +1185,8 @@ class _DetailModalState extends State<DetailModal> {
       selected: isSelected,
       selectedColor: color.withOpacity(0.3),
       onSelected: (_) {
-        _firestoreService.rsvpEvent(event.id, userId, status);
+      if (!_checkCanWrite()) return;
+      _firestoreService.rsvpEvent(event.id, userId, status);
         // Update local state so UI reflects change
         setDialogState(() {
           event.rsvps[userId] = status;
@@ -1198,7 +1239,8 @@ class _DetailModalState extends State<DetailModal> {
               },
             ),
             onSelected: (status) {
-              _firestoreService.rsvpEvent(event.id, memberId, status);
+            if (!_checkCanWrite()) return;
+            _firestoreService.rsvpEvent(event.id, memberId, status);
               // Update UI
               setDialogState(() {
                 event.rsvps[memberId] = status;
@@ -1360,7 +1402,10 @@ class _DetailModalState extends State<DetailModal> {
                                 ),
                               ),
                               TextButton(
-                                onPressed: () => _revertToVersion(event, version, dialogContext),
+                               onPressed: () {
+                                 if (!_checkCanWrite()) return;
+                                 _revertToVersion(event, version, dialogContext);
+                               },
                                 child: const Text("Revert"),
                               ),
                             ],
