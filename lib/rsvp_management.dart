@@ -28,12 +28,19 @@ class _RSVPManagementDialogState extends State<RSVPManagementDialog> {
     final isVeryNarrow = screenWidth < 390;
     final isNarrow = screenWidth < 450;
     
+    // Use 95% of screen width on mobile, capped at 600 for larger screens
+    final dialogWidth = screenWidth < 650 ? screenWidth * 0.95 : 600.0;
+    
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isNarrow ? 8 : 24,
+        vertical: 24,
+      ),
       child: Container(
-        width: 600,
+        width: dialogWidth,
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
         ),
         child: Column(
           children: [
@@ -141,7 +148,10 @@ class _RSVPManagementDialogState extends State<RSVPManagementDialog> {
                   }
 
                   return ListView.separated(
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: isNarrow ? 8 : 16,
+                      vertical: 12,
+                    ),
                     itemCount: filteredEvents.length,
                     separatorBuilder: (context, index) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {

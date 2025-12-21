@@ -89,6 +89,16 @@ class LoginOverlay extends StatelessWidget {
                       icon: Image.asset("assets/google_logo.png", height: 20),
                       label: const Text("Sign in with Google"),
                       onPressed: () => _signInWithGoogle(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black87,
+                        elevation: 2,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: Color(0xFFDDDDDD)),
+                        ),
+                      ),
                     ),
                   ],
                 ),

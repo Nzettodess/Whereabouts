@@ -203,11 +203,22 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
   Widget build(BuildContext context) {
     if (_user == null) return const SizedBox.shrink();
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrow = screenWidth < 450;
+    final isVeryNarrow = screenWidth < 380;
+    
+    // Use 95% of screen width on mobile, capped at 400 for larger screens
+    final dialogWidth = screenWidth < 450 ? screenWidth * 0.95 : 400.0;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isVeryNarrow ? 8 : (isNarrow ? 12 : 24),
+        vertical: 24,
+      ),
       child: Container(
-        padding: const EdgeInsets.all(20),
-        width: 400, // Max width constraint
+        padding: EdgeInsets.all(isNarrow ? 12 : 20),
+        width: dialogWidth,
         height: 500,
         child: Column(
           children: [
@@ -486,22 +497,50 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
             ),
 
             
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _showJoinDialog,
-                  icon: const Icon(Icons.group_add),
-                  label: const Text("Join Group"),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _showCreateDialog,
-                  icon: const Icon(Icons.add),
-                  label: const Text("Create Group"),
-                ),
-              ],
-            ),
+            const SizedBox(height: 16),
+            // Responsive buttons - stack vertically on very narrow screens
+            if (isVeryNarrow)
+              Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _showJoinDialog,
+                      icon: const Icon(Icons.group_add, size: 18),
+                      label: const Text("Join Group"),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _showCreateDialog,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text("Create Group"),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _showJoinDialog,
+                      icon: Icon(Icons.group_add, size: isNarrow ? 16 : 20),
+                      label: Text("Join", style: TextStyle(fontSize: isNarrow ? 12 : 14)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _showCreateDialog,
+                      icon: Icon(Icons.add, size: isNarrow ? 16 : 20),
+                      label: Text("Create", style: TextStyle(fontSize: isNarrow ? 12 : 14)),
+                    ),
+                  ),
+                ],
+              ),
 
           ],
         ),

@@ -83,86 +83,87 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
             return item.type == _selectedFilter;
           }).toList();
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrow = screenWidth < 450;
+    final isVeryNarrow = screenWidth < 400;
+    
+    // Use 95% of screen width on mobile, capped at 500 for larger screens
+    final dialogWidth = screenWidth < 550 ? screenWidth * 0.95 : 500.0;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isVeryNarrow ? 8 : (isNarrow ? 12 : 24),
+        vertical: 24,
+      ),
       child: Container(
-        width: 500,
+        width: dialogWidth,
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header - responsive padding
-            Builder(builder: (context) {
-              final isNarrow = MediaQuery.of(context).size.width < 450;
-              return Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isNarrow ? 12 : 20,
-                  vertical: isNarrow ? 8 : 16,
-                ),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primaryContainer,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.event_note, 
-                          color: Theme.of(context).colorScheme.onSurface,
-                          size: isNarrow ? 18 : 24,
-                        ),
-                        SizedBox(width: isNarrow ? 6 : 8),
-                        Text(
-                          "Upcoming",
-                          style: TextStyle(
-                            fontSize: isNarrow ? 16 : 20,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      iconSize: isNarrow ? 20 : 24,
-                      onPressed: () => Navigator.pop(context),
-                      padding: EdgeInsets.zero,
-                      constraints: BoxConstraints(
-                        minWidth: isNarrow ? 32 : 48,
-                        minHeight: isNarrow ? 32 : 48,
+            // Header - simple style like Groups dialog with more spacing
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isNarrow ? 12 : 20,
+                vertical: isNarrow ? 12 : 16,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.event_note, 
+                        color: Theme.of(context).colorScheme.onSurface,
+                        size: isNarrow ? 18 : 22,
                       ),
+                      SizedBox(width: isNarrow ? 6 : 8),
+                      Text(
+                        "Upcoming",
+                        style: TextStyle(
+                          fontSize: isNarrow ? 18 : 20,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    iconSize: isNarrow ? 20 : 24,
+                    onPressed: () => Navigator.pop(context),
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(
+                      minWidth: isNarrow ? 32 : 48,
+                      minHeight: isNarrow ? 32 : 48,
                     ),
-                  ],
-                ),
-              );
-            }),
+                  ),
+                ],
+              ),
+            ),
             
             // Filter chips - compact on mobile
             Container(
               padding: EdgeInsets.symmetric(
-                horizontal: MediaQuery.of(context).size.width < 450 ? 8 : 16,
-                vertical: MediaQuery.of(context).size.width < 450 ? 4 : 8,
+                horizontal: isVeryNarrow ? 4 : (isNarrow ? 8 : 16),
+                vertical: isVeryNarrow ? 2 : (isNarrow ? 4 : 8),
               ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildFilterChip(null, 'All', Icons.list),
-                    const SizedBox(width: 6),
-                    _buildFilterChip(UpcomingItemType.event, 'Events', Icons.celebration),
-                    const SizedBox(width: 6),
-                    _buildFilterChip(UpcomingItemType.locationChange, 'Locations', Icons.location_on),
-                    const SizedBox(width: 6),
-                    _buildFilterChip(UpcomingItemType.birthday, 'Birthdays', Icons.cake),
-                    const SizedBox(width: 6),
-                    _buildFilterChip(UpcomingItemType.holiday, 'Holidays', Icons.flag),
-                    const SizedBox(width: 8),
+                    _buildFilterChip(null, 'All', Icons.list, isVeryNarrow),
+                    SizedBox(width: isVeryNarrow ? 4 : 6),
+                    _buildFilterChip(UpcomingItemType.event, 'Events', Icons.celebration, isVeryNarrow),
+                    SizedBox(width: isVeryNarrow ? 4 : 6),
+                    _buildFilterChip(UpcomingItemType.locationChange, 'Locations', Icons.location_on, isVeryNarrow),
+                    SizedBox(width: isVeryNarrow ? 4 : 6),
+                    _buildFilterChip(UpcomingItemType.birthday, 'Birthdays', Icons.cake, isVeryNarrow),
+                    SizedBox(width: isVeryNarrow ? 4 : 6),
+                    _buildFilterChip(UpcomingItemType.holiday, 'Holidays', Icons.flag, isVeryNarrow),
+                    SizedBox(width: isVeryNarrow ? 4 : 8),
                   ],
                 ),
               ),
@@ -252,19 +253,20 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
     );
   }
 
-  Widget _buildFilterChip(UpcomingItemType? type, String label, IconData icon) {
+  Widget _buildFilterChip(UpcomingItemType? type, String label, IconData icon, [bool isVeryNarrow = false]) {
     final isSelected = _selectedFilter == type;
+    final iconSz = isVeryNarrow ? 14.0 : 16.0;
     return FilterChip(
       label: isSelected 
           ? Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 16, color: Colors.white),
-                const SizedBox(width: 4),
-                Text(label),
+                Icon(icon, size: iconSz, color: Colors.white),
+                SizedBox(width: isVeryNarrow ? 2 : 4),
+                Text(label, style: TextStyle(fontSize: isVeryNarrow ? 11 : 14)),
               ],
             )
-          : Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurface),
+          : Icon(icon, size: iconSz, color: Theme.of(context).colorScheme.onSurface),
       selected: isSelected,
       onSelected: (selected) {
         setState(() {
@@ -277,10 +279,14 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
       labelStyle: TextStyle(
         color: isSelected ? Colors.white : Theme.of(context).colorScheme.onSurface,
         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+        fontSize: isVeryNarrow ? 11 : 14,
       ),
       checkmarkColor: Colors.white,
       showCheckmark: false,
-      padding: isSelected ? null : const EdgeInsets.symmetric(horizontal: 4),
+      visualDensity: isVeryNarrow ? VisualDensity.compact : null,
+      padding: isSelected 
+          ? (isVeryNarrow ? const EdgeInsets.symmetric(horizontal: 4) : null)
+          : EdgeInsets.symmetric(horizontal: isVeryNarrow ? 2 : 4),
     );
   }
 
@@ -431,8 +437,10 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Builder(
         builder: (context) {
-          final isNarrow = MediaQuery.of(context).size.width < 450;
-          final iconSize = isNarrow ? 32.0 : 40.0;
+          final screenWidth = MediaQuery.of(context).size.width;
+          final isNarrow = screenWidth < 450;
+          final isVeryNarrow = screenWidth < 400;
+          final iconSize = isVeryNarrow ? 28.0 : (isNarrow ? 32.0 : 40.0);
           
           return Card(
             color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -445,34 +453,37 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
               borderRadius: BorderRadius.circular(10),
               onTap: () => _handleItemTap(item),
               child: Padding(
-                padding: EdgeInsets.all(isNarrow ? 8 : 12),
-                child: Row(
-                  children: [
-                    Container(
-                      width: iconSize,
-                      height: iconSize,
-                      decoration: BoxDecoration(
-                        color: bgColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(icon, color: iconColor, size: isNarrow ? 16 : 20),
-                    ),
-                    SizedBox(width: isNarrow ? 8 : 12),
-                    Expanded(
-                      child: Text(
-                        item.title,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: isNarrow ? 12 : 14,
+                padding: EdgeInsets.all(isVeryNarrow ? 6 : (isNarrow ? 8 : 12)),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: iconSize,
+                        height: iconSize,
+                        decoration: BoxDecoration(
+                          color: bgColor,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        child: Icon(icon, color: iconColor, size: isVeryNarrow ? 14 : (isNarrow ? 16 : 20)),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    // Compact group badges
-                    _buildGroupBadges(item.groupNames, isNarrow),
-                  ],
+                      SizedBox(width: isVeryNarrow ? 6 : (isNarrow ? 8 : 12)),
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: isVeryNarrow ? 11 : (isNarrow ? 12 : 14),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      SizedBox(width: isVeryNarrow ? 2 : 4),
+                      // Compact group badges
+                      _buildGroupBadges(item.groupNames, isNarrow),
+                    ],
+                  ),
                 ),
               ),
             ),
