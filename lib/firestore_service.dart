@@ -71,6 +71,10 @@ class FirestoreService {
     await sendNotification(
       group.ownerId,
       'New join request for ${group.name}',
+      type: NotificationType.joinRequest,
+      dedupeKey: 'join_${groupId}_$userId',
+      groupId: groupId,
+      relatedId: userId,
     );
   }
 
@@ -313,13 +317,59 @@ class FirestoreService {
 
   // --- Notifications ---
 
-  Future<void> sendNotification(String userId, String message) async {
-    await _db.collection('notifications').add({
+  /// Send a notification to a user
+  /// @param type - The notification type for proper categorization and icons
+  /// @param dedupeKey - Optional key for deduplication (updates instead of creates if exists)
+  /// @param groupId - Optional group context
+  /// @param relatedId - Optional related entity ID for navigation
+  Future<void> sendNotification(
+    String userId, 
+    String message, {
+    NotificationType type = NotificationType.general,
+    String? dedupeKey,
+    String? groupId,
+    String? relatedId,
+  }) async {
+    final notificationData = {
       'userId': userId,
       'message': message,
       'timestamp': FieldValue.serverTimestamp(),
       'read': false,
-    });
+      'type': type.name,
+      if (dedupeKey != null) 'dedupeKey': dedupeKey,
+      if (groupId != null) 'groupId': groupId,
+      if (relatedId != null) 'relatedId': relatedId,
+    };
+
+    // Handle deduplication if dedupeKey is provided
+    // Note: This only works when sending to yourself (e.g., birthday reminders)
+    // For notifications to others, we skip deduplication due to permission constraints
+    if (dedupeKey != null) {
+      try {
+        final existing = await _db
+            .collection('notifications')
+            .where('userId', isEqualTo: userId)
+            .where('dedupeKey', isEqualTo: dedupeKey)
+            .limit(1)
+            .get();
+
+        if (existing.docs.isNotEmpty) {
+          // Update existing notification instead of creating new
+          await existing.docs.first.reference.update({
+            'message': message,
+            'timestamp': FieldValue.serverTimestamp(),
+            'read': false,
+          });
+          return;
+        }
+      } catch (e) {
+        // Permission denied when querying other user's notifications - this is expected
+        // Just create a new notification instead
+        print('Deduplication query failed (expected for other users): $e');
+      }
+    }
+
+    await _db.collection('notifications').add(notificationData);
   }
 
   Stream<List<AppNotification>> getNotifications(String userId) {
@@ -328,9 +378,22 @@ class FirestoreService {
         .where('userId', isEqualTo: userId)
         .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => AppNotification.fromFirestore(doc))
-            .toList());
+        .map((snapshot) {
+          final notifications = <AppNotification>[];
+          for (final doc in snapshot.docs) {
+            try {
+              notifications.add(AppNotification.fromFirestore(doc));
+            } catch (e) {
+              print('Error parsing notification ${doc.id}: $e');
+              // Skip malformed notifications instead of crashing
+            }
+          }
+          return notifications;
+        })
+        .handleError((error) {
+          print('Error fetching notifications: $error');
+          return <AppNotification>[];
+        });
   }
 
   Future<void> markNotificationRead(String notificationId) async {
@@ -348,7 +411,13 @@ class FirestoreService {
       final group = Group.fromFirestore(groupDoc);
       for (final memberId in group.members) {
         if (memberId != event.creatorId) {
-          await sendNotification(memberId, "New Event: ${event.title} in ${group.name}");
+          await sendNotification(
+            memberId, 
+            "New Event: ${event.title} in ${group.name}",
+            type: NotificationType.eventCreated,
+            groupId: event.groupId,
+            relatedId: event.id,
+          );
         }
       }
     }
@@ -507,6 +576,8 @@ class FirestoreService {
       await sendNotification(
         userId,
         "Reminder: Please RSVP for '$eventTitle'",
+        type: NotificationType.eventUpdated,
+        relatedId: eventId,
       );
     }
   }
@@ -891,6 +962,8 @@ class FirestoreService {
     await sendNotification(
       userId,
       'You have successfully inherited data from "${placeholder.displayName}".',
+      type: NotificationType.general,
+      groupId: groupId,
     );
   }
 
@@ -962,7 +1035,9 @@ class FirestoreService {
       // Notify the requester
       await sendNotification(
         request.requesterId,
-        'Your request to join "$groupName" has been approved!',
+        'Your request to join "$groupName" has been approved! 🎉',
+        type: NotificationType.joinApproved,
+        groupId: request.groupId,
       );
     } else {
       // Notify rejection
@@ -972,6 +1047,8 @@ class FirestoreService {
       await sendNotification(
         request.requesterId,
         'Your request to join "$groupName" has been declined.',
+        type: NotificationType.joinRejected,
+        groupId: request.groupId,
       );
     }
     

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'theme.dart';
+import 'services/notification_service.dart';
 
 class SettingsDialog extends StatefulWidget {
   final String currentUserId;
@@ -23,6 +25,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
   bool _blockLocationDate = false;  // Block location for certain date
   bool _blockBirthday = false;
   bool _blockLunarBirthday = false;
+  
+  // Push notification settings
+  bool _pushNotificationsEnabled = true;
 
   final Map<String, String> _countryMap = {
     "US": "United States",
@@ -89,6 +94,11 @@ class _SettingsDialogState extends State<SettingsDialog> {
 
   Future<void> _loadSettings() async {
     final doc = await FirebaseFirestore.instance.collection('users').doc(widget.currentUserId).get();
+    
+    // Load push notification preference from local storage (outside setState)
+    final prefs = await SharedPreferences.getInstance();
+    final pushEnabled = prefs.getBool('push_notifications_enabled') ?? true;
+    
     if (doc.exists) {
       setState(() {
         final data = doc.data();
@@ -132,6 +142,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
           _blockLunarBirthday = privacy['blockLunarBirthday'] ?? false;
           _blockAllAdminEdits = _blockDefaultLocation && _blockLocationDate && _blockBirthday && _blockLunarBirthday;
         }
+        
+        // Apply push notification preference (loaded above, outside setState)
+        _pushNotificationsEnabled = pushEnabled;
       });
     }
   }
@@ -532,6 +545,35 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           _blockLunarBirthday = value ?? false;
                           _blockAllAdminEdits = _blockDefaultLocation && _blockLocationDate && _blockBirthday && _blockLunarBirthday;
                         });
+                      },
+                    ),
+
+                    SizedBox(height: isNarrow ? 16 : 20),
+                    
+                    // Push Notifications Section
+                    Text("Push Notifications", style: sectionTitleStyle),
+                    SizedBox(height: isNarrow ? 4 : 5),
+                    Text("Control mobile push notifications for this device:", style: bodyTextStyle),
+                    SizedBox(height: isNarrow ? 8 : 10),
+                    
+                    SwitchListTile(
+                      title: Text("Enable Push Notifications", style: bodyTextStyle),
+                      subtitle: Text(
+                        _pushNotificationsEnabled 
+                            ? "You'll receive push notifications on this device"
+                            : "Push notifications are disabled (in-app still work)",
+                        style: smallTextStyle,
+                      ),
+                      value: _pushNotificationsEnabled,
+                      dense: isNarrow,
+                      contentPadding: EdgeInsets.zero,
+                      activeColor: Theme.of(context).colorScheme.primary,
+                      onChanged: (bool value) async {
+                        setState(() {
+                          _pushNotificationsEnabled = value;
+                        });
+                        // Save immediately to local storage
+                        await NotificationService().setPushEnabled(value);
                       },
                     ),
                   ],

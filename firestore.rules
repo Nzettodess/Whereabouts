@@ -235,12 +235,21 @@ service cloud.firestore {
       allow read: if isAuthenticated() && 
                      resource.data.userId == userId();
       
-      // Any authenticated user can create (for sending to others)
-      allow create: if isAuthenticated();
+      // Any authenticated user can create notifications
+      // Validate required fields and allow optional fields
+      allow create: if isAuthenticated() &&
+                       request.resource.data.keys().hasAll(['userId', 'message', 'timestamp', 'read']) &&
+                       request.resource.data.keys().hasOnly(['userId', 'message', 'timestamp', 'read', 'type', 'dedupeKey', 'groupId', 'relatedId']) &&
+                       request.resource.data.userId is string &&
+                       request.resource.data.message is string &&
+                       request.resource.data.message.size() <= 500 &&
+                       request.resource.data.read == false;
       
       // User can only update their own (mark as read)
+      // Only allow changing the 'read' field
       allow update: if isAuthenticated() && 
-                       resource.data.userId == userId();
+                       resource.data.userId == userId() &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       
       // User can only delete their own
       allow delete: if isAuthenticated() && 

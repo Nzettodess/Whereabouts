@@ -153,12 +153,30 @@ class Holiday {
   }
 }
 
+/// Notification types for proper icon display and categorization
+enum NotificationType {
+  joinRequest,      // 👤 Join request received
+  joinApproved,     // ✅ Join request approved
+  joinRejected,     // ❌ Join request rejected
+  eventCreated,     // 📅 New event created
+  eventUpdated,     // 📅 Event updated
+  rsvpReceived,     // 📋 Someone RSVP'd to your event
+  locationChanged,  // 📍 Someone changed their location
+  birthdayToday,    // 🎂 It's someone's birthday
+  birthdayMonthly,  // 🎂 Monthly birthday summary
+  general,          // 🔔 General notification
+}
+
 class AppNotification {
   final String id;
   final String userId;
   final String message;
   final DateTime timestamp;
   final bool read;
+  final NotificationType type;
+  final String? dedupeKey;  // For deduplication: location_{userId}_{date}, event_{eventId}, etc.
+  final String? groupId;    // Optional group context
+  final String? relatedId;  // Optional: eventId, userId, etc. for navigation
 
   AppNotification({
     required this.id,
@@ -166,17 +184,47 @@ class AppNotification {
     required this.message,
     required this.timestamp,
     required this.read,
+    this.type = NotificationType.general,
+    this.dedupeKey,
+    this.groupId,
+    this.relatedId,
   });
 
   factory AppNotification.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    
+    // Handle null timestamp (can happen with pending server timestamps)
+    DateTime timestamp;
+    final tsData = data['timestamp'];
+    if (tsData != null && tsData is Timestamp) {
+      timestamp = tsData.toDate();
+    } else {
+      timestamp = DateTime.now(); // Fallback for pending/null timestamps
+    }
+    
     return AppNotification(
       id: doc.id,
       userId: data['userId'] ?? '',
       message: data['message'] ?? '',
-      timestamp: (data['timestamp'] as Timestamp).toDate(),
+      timestamp: timestamp,
       read: data['read'] ?? false,
+      type: _parseNotificationType(data['type']),
+      dedupeKey: data['dedupeKey'],
+      groupId: data['groupId'],
+      relatedId: data['relatedId'],
     );
+  }
+
+  static NotificationType _parseNotificationType(String? typeStr) {
+    if (typeStr == null) return NotificationType.general;
+    try {
+      return NotificationType.values.firstWhere(
+        (e) => e.name == typeStr,
+        orElse: () => NotificationType.general,
+      );
+    } catch (_) {
+      return NotificationType.general;
+    }
   }
 
   Map<String, dynamic> toMap() {
@@ -185,7 +233,33 @@ class AppNotification {
       'message': message,
       'timestamp': Timestamp.fromDate(timestamp),
       'read': read,
+      'type': type.name,
+      if (dedupeKey != null) 'dedupeKey': dedupeKey,
+      if (groupId != null) 'groupId': groupId,
+      if (relatedId != null) 'relatedId': relatedId,
     };
+  }
+
+  /// Get icon for this notification type
+  String get icon {
+    switch (type) {
+      case NotificationType.joinRequest:
+      case NotificationType.joinApproved:
+      case NotificationType.joinRejected:
+        return '👤';
+      case NotificationType.eventCreated:
+      case NotificationType.eventUpdated:
+        return '📅';
+      case NotificationType.rsvpReceived:
+        return '📋';
+      case NotificationType.locationChanged:
+        return '📍';
+      case NotificationType.birthdayToday:
+      case NotificationType.birthdayMonthly:
+        return '🎂';
+      case NotificationType.general:
+        return '🔔';
+    }
   }
 }
 

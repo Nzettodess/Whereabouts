@@ -28,6 +28,7 @@ import 'birthday_baby_dialog.dart';
 import 'services/connectivity_service.dart';
 import 'services/session_service.dart';
 import 'services/holiday_cache_service.dart';
+import 'services/notification_service.dart';
 import 'widgets/skeleton_loading.dart';
 
 class HomeWithLogin extends StatefulWidget {
@@ -95,10 +96,16 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
       });
       
       if (user != null) {
-        // User logged in
+        // User logged in - end any previous session first (for account switching)
+        _endSessionTracking();
+        
         _loadUserProfile();
         _loadData();
         _startSessionTracking(user.uid);
+        // Initialize FCM for push notifications
+        NotificationService().initialize(user.uid);
+        // Check for birthday notifications (day-of and monthly summary)
+        _checkBirthdayNotifications(user.uid);
       } else {
         // User logged out - clear data and cancel subscriptions
         _endSessionTracking();
@@ -494,6 +501,163 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
       setState(() {
         _photoUrl = doc.data()?['photoURL'];
       });
+    }
+  }
+
+  /// Check and send birthday notifications (day-of and monthly summary)
+  /// Called once on app load, with deduplication to prevent spam
+  Future<void> _checkBirthdayNotifications(String userId) async {
+    final notificationService = NotificationService();
+    
+    // Check if we should run birthday checks today
+    if (!await notificationService.shouldCheckBirthdaysToday()) {
+      return; // Already checked today
+    }
+    
+    try {
+      // Get user's groups
+      final groupsSnapshot = await FirebaseFirestore.instance
+          .collection('groups')
+          .where('members', arrayContains: userId)
+          .get();
+      
+      if (groupsSnapshot.docs.isEmpty) return;
+      
+      final today = DateTime.now();
+      final todayNormalized = DateTime(today.year, today.month, today.day);
+      
+      // Collect all member IDs across all groups
+      final allMemberIds = <String>{};
+      final groupMemberMap = <String, List<String>>{}; // groupId -> memberIds
+      
+      for (final groupDoc in groupsSnapshot.docs) {
+        final members = List<String>.from(groupDoc.data()['members'] ?? []);
+        allMemberIds.addAll(members);
+        groupMemberMap[groupDoc.id] = members;
+      }
+      
+      // Fetch all users' birthday data
+      final usersToCheck = allMemberIds.where((id) => id != userId).toList();
+      
+      for (final memberId in usersToCheck) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(memberId)
+            .get();
+        
+        if (!userDoc.exists) continue;
+        
+        final userData = userDoc.data()!;
+        userData['uid'] = memberId;
+        
+        // Check solar birthday
+        final solarBirthday = Birthday.getSolarBirthday(userData, today.year);
+        if (solarBirthday != null) {
+          final birthdayNormalized = DateTime(
+            solarBirthday.occurrenceDate.year,
+            solarBirthday.occurrenceDate.month,
+            solarBirthday.occurrenceDate.day,
+          );
+          
+          if (birthdayNormalized == todayNormalized) {
+            // It's their birthday today!
+            // Find which group(s) this member belongs to
+            for (final entry in groupMemberMap.entries) {
+              if (entry.value.contains(memberId)) {
+                await notificationService.notifyBirthday(
+                  memberIds: [userId], // Only notify current user
+                  birthdayPersonId: memberId,
+                  birthdayPersonName: solarBirthday.displayName,
+                  isLunar: false,
+                  groupId: entry.key,
+                );
+                break; // Only send one notification per birthday person
+              }
+            }
+          }
+        }
+        
+        // Check lunar birthday
+        final lunarBirthday = Birthday.getLunarBirthday(userData, today.year, today);
+        if (lunarBirthday != null) {
+          // Lunar birthday matches today
+          for (final entry in groupMemberMap.entries) {
+            if (entry.value.contains(memberId)) {
+              await notificationService.notifyBirthday(
+                memberIds: [userId], // Only notify current user
+                birthdayPersonId: memberId,
+                birthdayPersonName: lunarBirthday.displayName,
+                isLunar: true,
+                groupId: entry.key,
+              );
+              break;
+            }
+          }
+        }
+      }
+      
+      // Check for monthly birthday summary (1st of month)
+      if (await notificationService.shouldShowMonthlyBirthdaySummary()) {
+        final birthdayPeopleThisMonth = <String>[];
+        
+        for (final memberId in usersToCheck) {
+          final userDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(memberId)
+              .get();
+          
+          if (!userDoc.exists) continue;
+          
+          final userData = userDoc.data()!;
+          userData['uid'] = memberId;
+          final displayName = userData['displayName'] ?? 'User';
+          
+          // Check solar birthday
+          final solarBirthday = Birthday.getSolarBirthday(userData, today.year);
+          if (solarBirthday != null && 
+              solarBirthday.occurrenceDate.month == today.month) {
+            final day = solarBirthday.occurrenceDate.day;
+            birthdayPeopleThisMonth.add('$displayName (${day}${_getDaySuffix(day)})');
+          }
+          
+          // Check lunar birthday - iterate through all days of this month to find lunar birthdays
+          for (int day = 1; day <= DateTime(today.year, today.month + 1, 0).day; day++) {
+            final checkDate = DateTime(today.year, today.month, day);
+            final lunarBirthday = Birthday.getLunarBirthday(userData, today.year, checkDate);
+            if (lunarBirthday != null) {
+              birthdayPeopleThisMonth.add('$displayName [lunar] (${day}${_getDaySuffix(day)})');
+              break; // Only add once per person
+            }
+          }
+        }
+        
+        if (birthdayPeopleThisMonth.isNotEmpty) {
+          await notificationService.notifyMonthlyBirthdays(
+            userId: userId,
+            birthdayPeople: birthdayPeopleThisMonth,
+            month: today.month,
+          );
+        }
+        
+        await notificationService.markMonthlyBirthdaySummaryDone();
+      }
+      
+      // Mark birthday check as done for today
+      await notificationService.markBirthdayCheckDone();
+      
+    } catch (e) {
+      debugPrint('Error checking birthday notifications: $e');
+    }
+  }
+  
+  /// Helper to get day suffix (1st, 2nd, 3rd, etc.)
+  String _getDaySuffix(int day) {
+    if (day >= 11 && day <= 13) return 'th';
+    switch (day % 10) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
     }
   }
 
@@ -1121,6 +1285,26 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
     return birthdays;
   }
 
+  // Helper to get events for a specific date
+  List<GroupEvent> _getEventsForDate(DateTime date) {
+    return _events.where((e) {
+      final eventDate = e.date;
+      return eventDate.year == date.year && 
+             eventDate.month == date.month && 
+             eventDate.day == date.day;
+    }).toList();
+  }
+
+  // Helper to get holidays for a specific date
+  List<Holiday> _getHolidaysForDate(DateTime date) {
+    return _holidays.where((h) {
+      final holidayDate = h.date;
+      return holidayDate.year == date.year && 
+             holidayDate.month == date.month && 
+             holidayDate.day == date.day;
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final loggedIn = _user != null;
@@ -1169,15 +1353,80 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
               onPressed: _openBirthdayBabyDialog,
             ),
 
-            IconButton(
-              icon: const Icon(Icons.notifications, color: Colors.orange),
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => NotificationCenter(
-                    currentUserId: _user!.uid,
-                    canWrite: _canWrite,
-                  ),
+            // Notification bell with unread badge
+            StreamBuilder<int>(
+              stream: NotificationService().getUnreadCount(_user!.uid),
+              builder: (context, snapshot) {
+                final unreadCount = snapshot.data ?? 0;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications, color: Colors.orange),
+                      tooltip: 'Notifications',
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (dialogContext) => NotificationCenter(
+                            currentUserId: _user!.uid,
+                            canWrite: _canWrite,
+                            onNavigateToDate: (date) {
+                              // Close the notification dialog first (already handled in NotificationCenter)
+                              // Open detail modal for the specified date
+                              final normalizedDate = DateTime(date.year, date.month, date.day);
+                              final locations = _getLocationsForDate(normalizedDate);
+                              final events = _getEventsForDate(normalizedDate);
+                              final holidays = _getHolidaysForDate(normalizedDate);
+                              final birthdays = _getBirthdaysForDate(normalizedDate);
+                              
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                                ),
+                                builder: (sheetContext) => DetailModal(
+                                  date: normalizedDate,
+                                  locations: locations,
+                                  events: events,
+                                  holidays: holidays,
+                                  birthdays: birthdays,
+                                  currentUserId: _user!.uid,
+                                  canWrite: _canWrite,
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: 4,
+                        top: 4,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1.5),
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 18,
+                            minHeight: 18,
+                          ),
+                          child: Text(
+                            unreadCount > 9 ? '9+' : unreadCount.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
                 );
               },
             ),

@@ -472,6 +472,19 @@
     }
   </script>
 
+  <script>
+    // Register Firebase Cloud Messaging Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        .then(function(registration) {
+          console.log('FCM SW registered:', registration.scope);
+        })
+        .catch(function(error) {
+          console.log('FCM SW registration failed:', error);
+        });
+    }
+  </script>
+
   <script src="flutter_bootstrap.js" async></script>
 </body>
 
