@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../services/notification_service.dart';
+import '../models.dart';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:js' as js;
 
@@ -15,6 +17,7 @@ class CreditsAndFeedbackDialog extends StatefulWidget {
 class _CreditsAndFeedbackDialogState extends State<CreditsAndFeedbackDialog> {
   final TextEditingController _feedbackController = TextEditingController();
   bool _isSending = false;
+  String? _pushStatus;
 
   // Links
   static const String _githubUrl = 'https://github.com/Nzettodess';
@@ -217,7 +220,7 @@ class _CreditsAndFeedbackDialogState extends State<CreditsAndFeedbackDialog> {
             ),
             const SizedBox(height: 12),
 
-            // Actions
+            // actions
             Row(
               children: [
                 Expanded(
@@ -253,8 +256,132 @@ class _CreditsAndFeedbackDialogState extends State<CreditsAndFeedbackDialog> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            const Divider(),
+            // DEBUG SECTION
+            Text(
+              'PUSH NOTIFICATION DEBUG',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange.shade800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDebugRow('App ID:', NotificationService().oneSignalAppId),
+                  _buildDebugRow('Browser Support:', NotificationService().isNotificationSupported ? '✅ YES' : '❌ NO'),
+                  _buildDebugRow('SDK Loaded:', NotificationService().isOneSignalJSLoaded ? '✅ YES' : '❌ NO'),
+                  FutureBuilder<String>(
+                    future: NotificationService().getNotificationPermission(),
+                    builder: (context, snapshot) {
+                      final status = snapshot.data ?? 'loading...';
+                      String icon = '❓';
+                      if (status == 'granted') icon = '✅';
+                      if (status == 'denied') icon = '🚫';
+                      if (status == 'default') icon = '🔔';
+                      return _buildDebugRow('Status:', '$icon $status');
+                    },
+                  ),
+                  FutureBuilder<bool>(
+                    future: NotificationService().checkOneSignalSubscription(),
+                    builder: (context, snapshot) {
+                      final isSubscribed = snapshot.data ?? false;
+                      return _buildDebugRow('Subscribed:', isSubscribed ? '✅ YES' : '❌ NO');
+                    },
+                  ),
+                  _buildDebugRow('Player ID:', NotificationService().oneSignalPlayerId ?? "None"),
+                  if (_pushStatus != null)
+                    _buildDebugRow('API Status:', _pushStatus!),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            await NotificationService().initialize(FirebaseAuth.instance.currentUser!.uid);
+                            if (mounted) setState(() {});
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                          ),
+                          child: const Text('1. Request Permission', style: TextStyle(fontSize: 10)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            final user = FirebaseAuth.instance.currentUser;
+                            if (user != null) {
+                              setState(() => _pushStatus = 'Sending...');
+                              try {
+                                final result = await NotificationService().sendNotification(
+                                  userId: user.uid,
+                                  message: "🔔 Test notification! OneSignal is working.",
+                                  type: NotificationType.general,
+                                );
+                                setState(() => _pushStatus = result ?? '✅ Triggered');
+                              } catch (e) {
+                                setState(() => _pushStatus = '❌ Error: $e');
+                              }
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                          ),
+                          child: const Text('2. Trigger Push', style: TextStyle(fontSize: 10)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextButton(
+                          onPressed: () async {
+                            await NotificationService().clearPlayerIds();
+                            if (mounted) setState(() {
+                              _pushStatus = 'IDs Cleared';
+                            });
+                          },
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.red.shade300,
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                          ),
+                          child: const Text('Clear All IDs', style: TextStyle(fontSize: 10, decoration: TextDecoration.underline)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildDebugRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+          Text(value, style: const TextStyle(fontSize: 10, fontFamily: 'monospace')),
+        ],
       ),
     );
   }

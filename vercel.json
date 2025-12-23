@@ -1,10 +1,15 @@
 {
-    "buildCommand": "flutter build web --release",
+    "version": 2,
+    "public": true,
+    "cleanUrls": true,
     "outputDirectory": "build/web",
-    "framework": null,
     "rewrites": [
         {
-            "source": "/(.*)",
+            "source": "/api/(.*)",
+            "destination": "/api/$1"
+        },
+        {
+            "source": "/((?!.*\\.js$).*)",
             "destination": "/index.html"
         }
     ]

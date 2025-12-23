@@ -1,10 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'package:web/web.dart' as web;
 import '../models.dart';
 
@@ -14,8 +14,9 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  String? get oneSignalPlayerId => _oneSignalPlayerId;
 
   static const String _pushEnabledKey = 'push_notifications_enabled';
   static const String _lastBirthdayCheckKey = 'last_birthday_check_date';
@@ -26,113 +27,96 @@ class NotificationService {
 
   bool _initialized = false;
   String? _currentUserId;
-  String? _fcmToken;
   String? _oneSignalPlayerId;
+  
+  bool get isNotificationSupported {
+    if (!kIsWeb) return true;
+    try {
+      return (web.window as JSObject).hasProperty('Notification'.toJS).toDart;
+    } catch (_) {
+      return false;
+    }
+  }
 
-  /// Initialize the notification service
+  bool get isOneSignalJSLoaded {
+    if (!kIsWeb) return false;
+    try {
+      return (web.window as JSObject).hasProperty('getOneSignalPlayerId'.toJS).toDart;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String get oneSignalAppId {
+    if (!kIsWeb) return 'N/A';
+    try {
+      final jsWindow = web.window as JSObject;
+      if (jsWindow.hasProperty('getOneSignalAppId'.toJS).toDart) {
+        final result = jsWindow.callMethod('getOneSignalAppId'.toJS);
+        return result?.toString() ?? 'Unknown';
+      }
+    } catch (_) {}
+    return 'Not Found';
+  }
+
+  Future<bool> checkOneSignalSubscription() async {
+    if (!kIsWeb) return false;
+    try {
+      final jsWindow = web.window as JSObject;
+      if (jsWindow.hasProperty('isOneSignalSubscribed'.toJS).toDart) {
+        final result = jsWindow.callMethod('isOneSignalSubscribed'.toJS);
+        if (result != null) {
+          final jsPromise = result as JSPromise;
+          final value = await jsPromise.toDart.timeout(const Duration(seconds: 2));
+          if (value != null && value.isA<JSBoolean>()) {
+            return (value as JSBoolean).toDart;
+          }
+        }
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  Future<String> getNotificationPermission() async {
+    if (!kIsWeb) return 'default';
+    try {
+      final jsWindow = web.window as JSObject;
+      if (jsWindow.hasProperty('getNotificationPermission'.toJS).toDart) {
+        final result = jsWindow.callMethod('getNotificationPermission'.toJS);
+        return result?.toString() ?? 'default';
+      }
+    } catch (_) {}
+    return 'default';
+  }
+
   Future<void> initialize(String userId) async {
-    if (_initialized && _currentUserId == userId) return;
+    if (_initialized && _currentUserId == userId && _oneSignalPlayerId != null) return;
     
     _currentUserId = userId;
     
-    // Request permissions (will prompt user on first install)
-    await _requestPermissions();
-    
-    // Get FCM token and save it
-    await _getAndSaveToken();
-    
-    // Listen for token refresh
-    _messaging.onTokenRefresh.listen((newToken) {
-      _saveTokenToFirestore(newToken);
-    });
+    // Clear "None" from cache if present
+    if (_oneSignalPlayerId == 'None') _oneSignalPlayerId = null;
 
-    // Handle foreground messages
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-
-    // Handle background/terminated message taps
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
-    
     // Get OneSignal player ID and save to Firestore (web only)
     if (kIsWeb) {
       await _getAndSaveOneSignalPlayerId();
+      
+      // Sync push status to OneSignal
+      final enabled = await isPushEnabled();
+      await setPushEnabled(enabled);
     }
     
     _initialized = true;
     debugPrint('NotificationService initialized for user: $userId');
   }
 
-  /// Request notification permissions
-  Future<bool> _requestPermissions() async {
-    try {
-      final settings = await _messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-        provisional: false,
-      );
-      
-      final granted = settings.authorizationStatus == AuthorizationStatus.authorized ||
-                      settings.authorizationStatus == AuthorizationStatus.provisional;
-      
-      debugPrint('Notification permission: ${settings.authorizationStatus}');
-      return granted;
-    } catch (e) {
-      debugPrint('Error requesting notification permissions: $e');
-      return false;
-    }
-  }
+  // FCM token persistence has been removed - using OneSignal as primary provider
 
-  /// Get FCM token and save to Firestore
-  Future<void> _getAndSaveToken() async {
-    try {
-      // For web, we need to pass the VAPID key
-      if (kIsWeb) {
-        // Token will be null if permissions denied or not available
-        _fcmToken = await _messaging.getToken(
-          vapidKey: 'BDckkZhJu0uf_EMAofN6_8-qE5GntR-qNNC404-6cEZcADjoFIu-s8pKKMzENrFBek_pO6_xWM3DdD8TVU_2OXA',
-        );
-      } else {
-        _fcmToken = await _messaging.getToken();
-      }
-      
-      if (_fcmToken != null) {
-        await _saveTokenToFirestore(_fcmToken!);
-      }
-    } catch (e) {
-      debugPrint('Error getting FCM token: $e');
-    }
-  }
-
-  /// Save FCM token to Firestore for the current user
-  Future<void> _saveTokenToFirestore(String token) async {
+  /// Reset service when user logs out
+  Future<void> removeToken() async {
     if (_currentUserId == null) return;
     
-    try {
-      await _db.collection('users').doc(_currentUserId).update({
-        'fcmTokens': FieldValue.arrayUnion([token]),
-        'lastTokenUpdate': FieldValue.serverTimestamp(),
-      });
-      _fcmToken = token;
-      debugPrint('FCM token saved for user: $_currentUserId');
-    } catch (e) {
-      debugPrint('Error saving FCM token: $e');
-    }
-  }
-
-  /// Remove FCM token when user logs out
-  Future<void> removeToken() async {
-    if (_currentUserId == null || _fcmToken == null) return;
-    
-    try {
-      await _db.collection('users').doc(_currentUserId).update({
-        'fcmTokens': FieldValue.arrayRemove([_fcmToken]),
-      });
-      debugPrint('FCM token removed for user: $_currentUserId');
-    } catch (e) {
-      debugPrint('Error removing FCM token: $e');
-    }
-    
-    // Also remove OneSignal player ID
+    // Remove OneSignal player ID
     if (_oneSignalPlayerId != null) {
       try {
         await _db.collection('users').doc(_currentUserId).update({
@@ -145,9 +129,22 @@ class NotificationService {
     }
     
     _currentUserId = null;
-    _fcmToken = null;
     _oneSignalPlayerId = null;
     _initialized = false;
+  }
+
+  /// Clear all OneSignal player IDs for the current user
+  Future<void> clearPlayerIds() async {
+    if (_currentUserId == null) return;
+    try {
+      await _db.collection('users').doc(_currentUserId).update({
+        'oneSignalPlayerIds': [],
+      });
+      _oneSignalPlayerId = null;
+      debugPrint('Cleared all OneSignal player IDs for user: $_currentUserId');
+    } catch (e) {
+      debugPrint('Error clearing OneSignal player IDs: $e');
+    }
   }
 
   // ============= OneSignal Integration =============
@@ -157,16 +154,49 @@ class NotificationService {
     if (!kIsWeb) return;
     
     try {
-      // Call JavaScript function exposed in index.html
-      final playerId = await _callJsGetPlayerId();
+      // First try to get ID if already granted
+      String? result = await _callJsGetPlayerId();
       
-      if (playerId != null && playerId.isNotEmpty) {
-        _oneSignalPlayerId = playerId;
-        await _saveOneSignalPlayerIdToFirestore(playerId);
+      // If no ID or result is a status string, request permission
+      if (result == null || result == 'default' || result == 'denied') {
+        debugPrint('Requesting OneSignal permission/status...');
+        result = await _callJsRequestPermission();
+      }
+      
+      // Validation: Ensure it's a reasonably long string, not a status string like "granted"
+      if (result != null && result.length > 15) {
+        _oneSignalPlayerId = result;
+        await _saveOneSignalPlayerIdToFirestore(result);
+      } else {
+        debugPrint('OneSignal returned non-ID result or too short: $result');
       }
     } catch (e) {
       debugPrint('Error getting OneSignal player ID: $e');
     }
+  }
+
+  /// Call JavaScript requestPushPermission function
+  Future<String?> _callJsRequestPermission() async {
+    if (!kIsWeb) return null;
+    
+    try {
+      final jsWindow = web.window as JSObject;
+      if (!jsWindow.hasProperty('requestPushPermission'.toJS).toDart) {
+        debugPrint('JS requestPushPermission function not found');
+        return null;
+      }
+      
+      final result = jsWindow.callMethod('requestPushPermission'.toJS);
+      if (result != null) {
+        final jsPromise = result as JSPromise;
+        // Add a 30 second timeout for the permission prompt
+        final value = await jsPromise.toDart.timeout(const Duration(seconds: 30));
+        return value?.toString();
+      }
+    } catch (e) {
+      debugPrint('JS requestPushPermission error: $e');
+    }
+    return null;
   }
 
   /// Call JavaScript getOneSignalPlayerId function
@@ -174,11 +204,16 @@ class NotificationService {
     if (!kIsWeb) return null;
     
     try {
-      final result = (web.window as dynamic).getOneSignalPlayerId?.call();
+      final jsWindow = web.window as JSObject;
+      if (!jsWindow.hasProperty('getOneSignalPlayerId'.toJS).toDart) {
+        debugPrint('JS getOneSignalPlayerId function not found');
+        return null;
+      }
+
+      final result = jsWindow.callMethod('getOneSignalPlayerId'.toJS);
       if (result != null) {
-        // Await the Promise
         final jsPromise = result as JSPromise;
-        final value = await jsPromise.toDart;
+        final value = await jsPromise.toDart.timeout(const Duration(seconds: 5));
         return value?.toString();
       }
     } catch (e) {
@@ -202,18 +237,31 @@ class NotificationService {
     }
   }
 
-  /// Send push notification via Netlify serverless function
-  Future<void> _sendPushNotification({
+  /// Send push notification via serverless function
+  Future<String?> _sendPushNotification({
     required List<String> playerIds,
     required String message,
     String? title,
     Map<String, dynamic>? data,
   }) async {
-    if (playerIds.isEmpty) return;
+    if (playerIds.isEmpty) {
+      debugPrint('PUSH ERROR: playerIds is empty');
+      return 'Error: No playerIds';
+    }
     
     try {
+      // For web, use absolute URL to avoid issues with relative paths in some environments
+      String apiUrl = _pushApiUrl;
+      if (kIsWeb) {
+        final origin = web.window.location.origin;
+        apiUrl = (origin.endsWith('/') ? origin : '$origin/') + 
+                 (_pushApiUrl.startsWith('/') ? _pushApiUrl.substring(1) : _pushApiUrl);
+      }
+      
+      debugPrint('Sending push to $apiUrl for ${playerIds.length} players');
+      
       final response = await http.post(
-        Uri.parse(_pushApiUrl),
+        Uri.parse(apiUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'playerIds': playerIds,
@@ -224,12 +272,15 @@ class NotificationService {
       );
       
       if (response.statusCode == 200) {
-        debugPrint('Push notification sent successfully');
+        debugPrint('Push notification logic triggered successfully');
+        return 'Sent (${response.body})';
       } else {
-        debugPrint('Push notification failed: ${response.body}');
+        debugPrint('Push notification API error (Status ${response.statusCode}): ${response.body}');
+        return 'Error ${response.statusCode}: ${response.body}';
       }
     } catch (e) {
-      debugPrint('Error sending push notification: $e');
+      debugPrint('Error calling push API: $e');
+      return 'Exception: $e';
     }
   }
 
@@ -241,7 +292,10 @@ class NotificationService {
         final data = userDoc.data();
         final playerIds = data?['oneSignalPlayerIds'];
         if (playerIds != null && playerIds is List) {
-          return List<String>.from(playerIds);
+          // Filter out "None", nulls, or invalid strings that might be stuck in Firestore
+          return List<String>.from(playerIds)
+              .where((id) => id != 'None' && id.isNotEmpty && id.length > 15)
+              .toList();
         }
       }
     } catch (e) {
@@ -250,17 +304,9 @@ class NotificationService {
     return [];
   }
 
-  /// Handle foreground messages
-  void _handleForegroundMessage(RemoteMessage message) {
-    debugPrint('Foreground message received: ${message.notification?.title}');
-    // In-app notifications are handled by Firestore stream, no action needed
-  }
+  // Unused FCM handlers removed during cleanup
 
-  /// Handle when user taps a notification that opened the app
-  void _handleMessageOpenedApp(RemoteMessage message) {
-    debugPrint('Notification opened app: ${message.notification?.title}');
-    // Could navigate to notification center here
-  }
+  // Unused background message handlers have been removed as part of FCM cleanup
 
   // ============= Push Preference Management =============
 
@@ -274,6 +320,19 @@ class NotificationService {
   Future<void> setPushEnabled(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_pushEnabledKey, enabled);
+    
+    // Call JS bridge to opt-out/in of OneSignal
+    if (kIsWeb) {
+      try {
+        final jsWindow = web.window as JSObject;
+        if (jsWindow.hasProperty('setOneSignalPushEnabled'.toJS).toDart) {
+          jsWindow.callMethod('setOneSignalPushEnabled'.toJS, enabled.toJS);
+        }
+      } catch (e) {
+        debugPrint('Error calling JS setOneSignalPushEnabled: $e');
+      }
+    }
+    
     debugPrint('Push notifications ${enabled ? 'enabled' : 'disabled'}');
   }
 
@@ -281,7 +340,7 @@ class NotificationService {
 
   /// Send notification with deduplication support
   /// If dedupeKey is provided, it will update existing notification instead of creating new one
-  Future<void> sendNotification({
+  Future<String?> sendNotification({
     required String userId,
     required String message,
     required NotificationType type,
@@ -318,7 +377,8 @@ class NotificationService {
             'read': false,
           });
           debugPrint('Updated existing notification: $dedupeKey');
-          return;
+          // Still trigger push for update
+          return await _sendPushToUser(userId, message, type.name);
         }
       }
 
@@ -326,26 +386,25 @@ class NotificationService {
       await _db.collection('notifications').add(notificationData);
       debugPrint('Created notification for $userId: $message');
       
-      // Send push notification via OneSignal (don't await to avoid blocking)
-      _sendPushToUser(userId, message, type.name);
+      // Send push notification via OneSignal
+      return await _sendPushToUser(userId, message, type.name);
     } catch (e) {
       debugPrint('Error sending notification: $e');
+      return 'Error: $e';
     }
   }
 
   /// Send push notification to a specific user
-  Future<void> _sendPushToUser(String userId, String message, String type) async {
-    // Don't send push to self
-    if (userId == _currentUserId) return;
-    
+  Future<String?> _sendPushToUser(String userId, String message, String type) async {
     final playerIds = await _getPlayerIdsForUser(userId);
     if (playerIds.isNotEmpty) {
-      await _sendPushNotification(
+      return await _sendPushNotification(
         playerIds: playerIds,
         message: message,
         data: {'type': type},
       );
     }
+    return 'No Player IDs found';
   }
 
   /// Send notifications to multiple users

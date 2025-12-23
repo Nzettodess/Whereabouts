@@ -472,53 +472,106 @@
     }
   </script>
 
-  <script>
-    // Register Firebase Cloud Messaging Service Worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/firebase-messaging-sw.js')
-        .then(function(registration) {
-          console.log('FCM SW registered:', registration.scope);
-        })
-        .catch(function(error) {
-          console.log('FCM SW registration failed:', error);
-        });
-    }
-  </script>
+  <!-- FCM Service Worker registration removed (Cleanup) -->
 
   <!-- OneSignal Web Push SDK -->
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
   <script>
     window.OneSignalDeferred = window.OneSignalDeferred || [];
-    OneSignalDeferred.push(async function(OneSignal) {
-      await OneSignal.init({
-        appId: "YOUR_ONESIGNAL_APP_ID", // Replace with your OneSignal App ID
-        notifyButton: {
-          enable: false, // We use Flutter UI for notifications
-        },
-        allowLocalhostAsSecureOrigin: true, // For local development
-      });
-      
-      // Expose function to get player ID for Flutter
-      window.getOneSignalPlayerId = async function() {
-        try {
-          const playerId = await OneSignal.User.PushSubscription.id;
-          return playerId;
-        } catch (e) {
-          console.error('Error getting OneSignal player ID:', e);
-          return null;
-        }
-      };
-      
-      // Expose function to request permission
-      window.requestPushPermission = async function() {
-        try {
-          await OneSignal.Notifications.requestPermission();
-          return await window.getOneSignalPlayerId();
-        } catch (e) {
-          console.error('Error requesting push permission:', e);
-          return null;
-        }
-      };
+    OneSignalDeferred.push(async function (OneSignal) {
+      try {
+        console.log('Starting OneSignal Init...');
+        await OneSignal.init({
+          appId: "74c32f25-a8d0-4d63-889b-9edf49ba8784",
+          safari_web_id: "web.onesignal.auto.65a2ca34-f112-4f9d-a5c6-253c0b61cb9f",
+          notifyButton: {
+            enable: false, // We use Flutter UI for notifications
+          },
+          allowLocalhostAsSecureOrigin: true, // For local development
+        });
+        // Expose function to get current permission status
+        window.getNotificationPermission = function () {
+          return OneSignal.Notifications.permission ? 'granted' : (window.Notification ? window.Notification.permission : 'unsupported');
+        };
+
+        // Expose function to get App ID for debugging
+        window.getOneSignalAppId = function () {
+          return "74c32f25-a8d0-4d63-889b-9edf49ba8784";
+        };
+
+        // Expose function to toggle push notifications (Settings bridge)
+        window.setOneSignalPushEnabled = function (enabled) {
+          console.log('Setting OneSignal Push Enabled:', enabled);
+          if (enabled) {
+            OneSignal.User.PushSubscription.optIn();
+          } else {
+            OneSignal.User.PushSubscription.optOut();
+          }
+        };
+
+        // Expose function to check subscription status
+        window.isOneSignalSubscribed = async function () {
+          try {
+            return OneSignal.User.PushSubscription.optedIn;
+          } catch (e) {
+            return false;
+          }
+        };
+
+        // Expose function to get player ID for Flutter
+        window.getOneSignalPlayerId = async function () {
+          try {
+            console.log('Dart requested Player ID. Current subscription state:', OneSignal.User.PushSubscription.optedIn);
+            // Wait up to 5 seconds for ID to be available
+            for (let i = 0; i < 10; i++) {
+              const playerId = OneSignal.User.PushSubscription.id;
+              if (playerId) {
+                console.log('Dart requested Player ID found:', playerId);
+                return playerId;
+              }
+              console.log('Waiting for OneSignal Player ID (attempt ' + (i + 1) + ')...');
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            console.warn('OneSignal Player ID not found after 5 seconds');
+            return null;
+          } catch (e) {
+            console.error('Error getting OneSignal player ID:', e);
+            return null;
+          }
+        };
+
+        // Expose function to request permission
+        window.requestPushPermission = async function () {
+          try {
+            console.log('Requesting OneSignal notification permission...');
+            const currentPermission = window.getNotificationPermission();
+
+            if (currentPermission === 'denied') {
+              console.warn('Notifications are blocked at the browser level.');
+              return 'denied';
+            }
+
+            await OneSignal.Notifications.requestPermission();
+
+            const finalPermission = window.getNotificationPermission();
+            if (finalPermission === 'granted') {
+              console.log('Permission granted, ensuring opted-in...');
+              await OneSignal.User.PushSubscription.optIn();
+
+              // Wait for ID to be generated
+              return await window.getOneSignalPlayerId();
+            }
+
+            return finalPermission;
+          } catch (e) {
+            console.error('Error requesting push permission:', e);
+            return null;
+          }
+        };
+        console.log('OneSignal Initialized successfully');
+      } catch (e) {
+        console.error('OneSignal Init Error:', e);
+      }
     });
   </script>
 
