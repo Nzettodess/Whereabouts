@@ -385,18 +385,45 @@ class _NotificationDebugDialogState extends State<NotificationDebugDialog> {
     });
 
     final tests = [
-      {'name': 'Read Other Personal Profile', 'action': () => FirebaseFirestore.instance.collection('users').doc('fake_uid_random_leak').get()},
-      {'name': 'Leak Check: Legacy Access (Limits)', 'action': () => FirebaseFirestore.instance.collection('users').limit(5).get()},
-      {'name': 'Edit Others Profile (3.1.3)', 'action': () => FirebaseFirestore.instance.collection('users').doc('fake_uid').update({'displayName': 'Hacked'})},
-      {'name': 'Read Others Sessions (6.1.6)', 'action': () => FirebaseFirestore.instance.collectionGroup('active_sessions').get()},
-      {'name': 'Delete Random Event (4.2.3)', 'action': () => FirebaseFirestore.instance.collection('events').doc('random_event_id').delete()},
-      {'name': 'Delete Others Location (3.2.4)', 'action': () => FirebaseFirestore.instance.collection('user_locations').doc('other_loc_123').delete()},
-      {'name': 'Read Others Notifications (5.3)', 'action': () => FirebaseFirestore.instance.collection('notifications').where('userId', isEqualTo: 'other_user_uid').get()},
-      {'name': 'Member Update Group Name (2.3)', 'action': () => FirebaseFirestore.instance.collection('groups').doc('test_group_123').update({'name': 'Hacked Name'})},
-      {'name': 'Member Create Placeholder (5.2)', 'action': () => FirebaseFirestore.instance.collection('placeholder_members').add({'firstName': 'Hacked', 'groupId': 'test_group_123'})},
-      {'name': 'Self-Approve Inheritance (7.3)', 'action': () => FirebaseFirestore.instance.collection('inheritance_requests').doc('req_123').update({'status': 'approved'})},
-      {'name': 'Non-Member Update Event (6.3)', 'action': () => FirebaseFirestore.instance.collection('events').doc('event_123').update({'title': 'Hacked Event'})},
+      // === USERS COLLECTION ===
+      {'name': 'Users: Read Random User (No Shared Group)', 'action': () => FirebaseFirestore.instance.collection('users').doc('fake_uid_random_leak').get()},
+      {'name': 'Users: Query All Users (Limit)', 'action': () => FirebaseFirestore.instance.collection('users').limit(5).get()},
+      {'name': 'Users: Search Users by Name', 'action': () => FirebaseFirestore.instance.collection('users').where('displayName', isGreaterThan: 'A').get()},
+      {'name': 'Users: Edit Others Profile', 'action': () => FirebaseFirestore.instance.collection('users').doc('fake_uid').update({'displayName': 'Hacked'})},
+      {'name': 'Users: Read Others Sessions', 'action': () => FirebaseFirestore.instance.collectionGroup('active_sessions').get()},
+      
+      // === GROUPS COLLECTION ===
+      {'name': 'Groups: Member Update Group Name', 'action': () => FirebaseFirestore.instance.collection('groups').doc('test_group_123').update({'name': 'Hacked Name'})},
+      {'name': 'Groups: Delete Random Group', 'action': () => FirebaseFirestore.instance.collection('groups').doc('random_group_id').delete()},
+      
+      // === EVENTS COLLECTION ===
+      {'name': 'Events: Non-Member Read Event', 'action': () => FirebaseFirestore.instance.collection('events').doc('event_123').get()},
+      {'name': 'Events: Non-Member Update Event', 'action': () => FirebaseFirestore.instance.collection('events').doc('event_123').update({'title': 'Hacked Event'})},
+      {'name': 'Events: Delete Random Event', 'action': () => FirebaseFirestore.instance.collection('events').doc('random_event_id').delete()},
+      
+      // === USER_LOCATIONS COLLECTION ===
+      {'name': 'Locations: Delete Others Location', 'action': () => FirebaseFirestore.instance.collection('user_locations').doc('other_loc_123').delete()},
+      
+      // === PLACEHOLDER_MEMBERS COLLECTION ===
+      {'name': 'Placeholders: Member Create Placeholder', 'action': () => FirebaseFirestore.instance.collection('placeholder_members').add({'displayName': 'Hacked', 'groupId': 'test_group_123'})},
+      {'name': 'Placeholders: Non-Member Read Placeholder', 'action': () => FirebaseFirestore.instance.collection('placeholder_members').doc('ph_123').get()},
+      
+      // === INHERITANCE_REQUESTS COLLECTION ===
+      {'name': 'Inheritance: Self-Approve Request', 'action': () => FirebaseFirestore.instance.collection('inheritance_requests').doc('req_123').update({'status': 'approved'})},
+      {'name': 'Inheritance: Non-Admin Read Request', 'action': () => FirebaseFirestore.instance.collection('inheritance_requests').doc('req_123').get()},
+      
+      // === JOIN_REQUESTS COLLECTION ===
+      {'name': 'JoinReq: Non-Admin Approve', 'action': () => FirebaseFirestore.instance.collection('join_requests').doc('join_123').update({'status': 'approved', 'processedBy': 'hacker', 'processedAt': FieldValue.serverTimestamp()})},
+      {'name': 'JoinReq: Change Forbidden Field', 'action': () => FirebaseFirestore.instance.collection('join_requests').doc('join_123').update({'requesterId': 'hacked_id'})},
+      
+      // === NOTIFICATIONS COLLECTION ===
+      {'name': 'Notifications: Read Others Notifications', 'action': () => FirebaseFirestore.instance.collection('notifications').where('userId', isEqualTo: 'other_user_uid').get()},
+      {'name': 'Notifications: Delete Others Notification', 'action': () => FirebaseFirestore.instance.collection('notifications').doc('notif_123').delete()},
+      
+      // === FEEDBACK COLLECTION ===
+      {'name': 'Feedback: Read Any Feedback', 'action': () => FirebaseFirestore.instance.collection('feedback').limit(1).get()},
     ];
+
 
     for (var test in tests) {
       try {

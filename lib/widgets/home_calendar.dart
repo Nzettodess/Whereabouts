@@ -433,13 +433,13 @@ class _HomeCalendarState extends State<HomeCalendar> {
         religiousFontSize: 7.0,
         barFontSize: 6.5,
         moreFontSize: 6.0,
-        avatarSize: 16.0,
+        avatarSize: 15.0,  // Smaller when = 3
         avatarSizeMedium: 13.0,
         avatarSizeSmall: 11.0,
         cellPadding: 0.5,
         maxAvatars: 3,  // Fewer avatars on mobile
         showLunarMonth: false,  // Hide month like 十月, only show day
-        maxBars: 6,  // More rows since mobile screens are tall
+        maxBars: 5,  // Limit to 5 to prevent overflow
       );
     } else if (width < 800) {
       // Tablet (500-800px) - medium sizing
@@ -491,10 +491,10 @@ class _HomeCalendarState extends State<HomeCalendar> {
           // Pre-calculate maxBars once based on calendar height
           // Each cell is roughly calendarHeight / 6 rows
           final estimatedCellHeight = calendarConstraints.maxHeight / 6;
-          final reservedHeight = sizes.dayFontSize + 8 + sizes.avatarSize + 12;
+          final reservedHeight = sizes.dayFontSize + 8 + sizes.avatarSize + sizes.moreFontSize + 16; // +N more text + padding
           final availableHeight = estimatedCellHeight - reservedHeight;
           final barHeight = sizes.barFontSize + 5;
-          final dynamicMaxBars = (availableHeight / barHeight).floor().clamp(1, 10);
+          final dynamicMaxBars = (availableHeight / barHeight).floor().clamp(1, 5); // Clamp to 5 max
           
           return SfCalendar(
         controller: widget.controller,
@@ -667,18 +667,30 @@ class _HomeCalendarState extends State<HomeCalendar> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
-                        ...dayTravelers.take(sizes.maxAvatars).map((l) {
-                          final user = widget.allUsers.firstWhere((u) => u['uid'] == l.userId, orElse: () => {});
-                          final name = user['displayName'] ?? user['email'] ?? "User";
-                          final photoUrl = user['photoURL'];
+                        // Filter and sort travelers for display
+                        // Priority: 1) Exclude current user if exceeds max, 2) Take up to maxAvatars
+                        ...(() {
+                          var travelerList = dayTravelers.toList();
                           
-                          // Dynamic sizing based on count - using responsive base sizes
-                          final count = dayTravelers.length;
-                          final double avatarSize = count <= sizes.maxAvatars 
-                            ? sizes.avatarSize
-                            : count <= 12 
-                              ? sizes.avatarSizeMedium
-                              : sizes.avatarSizeSmall;
+                          // If exceeds max, exclude current user first to prioritize showing others
+                          if (travelerList.length > sizes.maxAvatars) {
+                            travelerList = travelerList.where((l) => l.userId != widget.currentUserId).toList();
+                          }
+                          
+                          // Take up to maxAvatars
+                          final displayList = travelerList.take(sizes.maxAvatars).toList();
+                          final displayCount = displayList.length;
+                          
+                          return displayList.map((l) {
+                            final user = widget.allUsers.firstWhere((u) => u['uid'] == l.userId, orElse: () => {});
+                            final name = user['displayName'] ?? user['email'] ?? "User";
+                            final photoUrl = user['photoURL'];
+
+                            // Dynamic sizing: reduce 1px when exactly maxAvatars shown
+                            double avatarSize = sizes.avatarSize;
+                            if (displayCount == sizes.maxAvatars) {
+                              avatarSize = sizes.avatarSize - 1; // 1px smaller when exactly max
+                            }
                           
                           // Use imageUrl: either photoUrl or fallback
                           final imageUrl = (photoUrl != null && photoUrl is String && photoUrl.isNotEmpty) 
@@ -735,7 +747,8 @@ class _HomeCalendarState extends State<HomeCalendar> {
                               ),
                             ),
                           );
-                        }).toList(),
+                        });
+                      })(),
                         // Show +N more indicator if there are more than maxAvatars
                         if (dayTravelers.length > sizes.maxAvatars)
                           Container(

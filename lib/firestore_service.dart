@@ -507,6 +507,32 @@ class FirestoreService {
     await _db.collection('notifications').doc(notificationId).update({'read': true});
   }
 
+  Future<void> markNotificationUnread(String notificationId) async {
+    await _db.collection('notifications').doc(notificationId).update({'read': false});
+  }
+
+  Future<void> deleteNotification(String notificationId) async {
+    await _db.collection('notifications').doc(notificationId).delete();
+  }
+
+  Future<void> deleteAllNotifications(String userId) async {
+    final snapshot = await _db.collection('notifications').where('userId', isEqualTo: userId).get();
+    final batch = _db.batch();
+    for (final doc in snapshot.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
+  Future<void> markAllAsUnread(String userId) async {
+    final snapshot = await _db.collection('notifications').where('userId', isEqualTo: userId).get();
+    final batch = _db.batch();
+    for (final doc in snapshot.docs) {
+      batch.update(doc.reference, {'read': false});
+    }
+    await batch.commit();
+  }
+
   // --- Events ---
 
   Future<void> createEvent(GroupEvent event) async {
@@ -555,19 +581,8 @@ class FirestoreService {
 
     await _db.collection('events').doc(event.id).update(updateData);
 
-    // Notify members
-    final groupDoc = await _db.collection('groups').doc(event.groupId).get();
-    if (groupDoc.exists) {
-      final group = Group.fromFirestore(groupDoc);
-      debugPrint('[FirestoreService] Notifying ${group.members.length} members for event update: ${event.title}');
-      await NotificationService().notifyEventUpdated(
-        memberIds: group.members,
-        editorId: editedByUserId,
-        eventId: event.id,
-        eventTitle: event.title,
-        groupId: event.groupId,
-      );
-    }
+    // NOTE: Notification is handled by add_event_modal.dart with changeSummary
+    // Do NOT send notification here to avoid duplicates
   }
 
   Future<void> deleteEvent(String eventId, String deleterId) async {
@@ -990,7 +1005,7 @@ class FirestoreService {
       final group = Group.fromFirestore(groupDoc);
       
       await NotificationService().notifyInheritanceRequest(
-        adminIds: group.admins, // admins includes owner usually
+        adminIds: [...group.admins, group.ownerId], // Include owner explicitly
         requesterId: requesterId,
         requesterName: userName,
         placeholderName: phName,
@@ -1224,8 +1239,12 @@ class FirestoreService {
       await _db.collection('groups').doc(request.groupId).update({
         'members': FieldValue.arrayUnion([request.requesterId]),
       });
-      // Note: We used to update user's joinedGroupIds here, but Admins can't write to other Users.
-      // The user must sync their own group list on next app launch.
+      
+      // Force sync the new member's joinedGroupIds immediately
+      // This allows them to read other group members' profiles right away
+      await _db.collection('users').doc(request.requesterId).update({
+        'joinedGroupIds': FieldValue.arrayUnion([request.groupId]),
+      });
       
       // Get group name for notification
       final groupDoc = await _db.collection('groups').doc(request.groupId).get();

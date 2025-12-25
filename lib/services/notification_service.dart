@@ -553,7 +553,16 @@ class NotificationService {
     required String placeholderName,
     required String groupId,
   }) async {
-    final recipients = adminIds.where((id) => id != requesterId).toList();
+    final recipients = adminIds.where((id) => id != requesterId).toSet().toList(); // Dedupe
+    debugPrint('[InheritanceNotif] adminIds: $adminIds');
+    debugPrint('[InheritanceNotif] requesterId: $requesterId');
+    debugPrint('[InheritanceNotif] recipients after filter: $recipients');
+    
+    if (recipients.isEmpty) {
+      debugPrint('[InheritanceNotif] WARNING: No recipients to notify!');
+      return;
+    }
+    
     await sendNotificationToMany(
       userIds: recipients,
       message: '$requesterName requested to inherit "$placeholderName"',
@@ -640,21 +649,28 @@ class NotificationService {
   }) async {
     final recipients = memberIds.where((id) => id != editorId).toList();
     
+    if (recipients.isEmpty) return;
+    
+    debugPrint('[EventUpdate] changeSummary: $changeSummary');
+    
     final baseMessage = 'Event updated: $eventTitle';
-    final fullMessage = changeSummary != null 
+    final fullMessage = changeSummary != null && changeSummary.isNotEmpty
         ? '$baseMessage\n$changeSummary' 
         : baseMessage;
+    
+    debugPrint('[EventUpdate] fullMessage: $fullMessage');
 
-    for (final userId in recipients) {
-      await sendNotification(
-        userId: userId,
-        message: fullMessage,
-        type: NotificationType.eventUpdated,
-        dedupeKey: 'event_$eventId',
-        groupId: groupId,
-        relatedId: eventId,
-      );
-    }
+    // Use timestamp-based dedupeKey to prevent stacking (each update is separate)
+    final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+    
+    await sendNotificationToMany(
+      userIds: recipients,
+      message: fullMessage,
+      type: NotificationType.eventUpdated,
+      dedupeKeyPrefix: 'event_${eventId}_$timestamp',
+      groupId: groupId,
+      relatedId: eventId,
+    );
   }
 
   /// Send event deleted notification to group members

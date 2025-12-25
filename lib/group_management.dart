@@ -24,6 +24,47 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
   final TextEditingController _groupNameController = TextEditingController();
   final TextEditingController _joinCodeController = TextEditingController();
 
+  void _renameGroup(Group group) {
+    if (_user == null) return;
+    final controller = TextEditingController(text: group.name);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Rename Group"),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: "New Name"),
+          textCapitalization: TextCapitalization.sentences,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.trim().isEmpty) return;
+              try {
+                // Determine if user is allowed (Double check owner/admin status)
+                // UI already hides the button, but good to be safe.
+                // Firestore rules should also enforce this.
+                await FirebaseFirestore.instance.collection('groups').doc(group.id).update({
+                  'name': controller.text.trim()
+                });
+                 if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Group renamed!")));
+                }
+              } catch (e) {
+                if (mounted) {
+                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+                }
+              }
+            },
+            child: const Text("Rename"),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _createGroup() async {
     if (_groupNameController.text.isEmpty || _user == null) return;
     try {
@@ -215,7 +256,7 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
         vertical: 24,
       ),
       child: Container(
-        padding: EdgeInsets.all(isNarrow ? 12 : 20),
+        padding: EdgeInsets.all(isNarrow ? 8 : 20),
         width: dialogWidth,
         height: 500,
         child: Column(
@@ -255,12 +296,25 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                         subtitle: Row(
                           children: [
                             Expanded(
-                              child: Text('ID: ${group.id}', overflow: TextOverflow.ellipsis),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text('ID: ${group.id}', overflow: TextOverflow.ellipsis),
+                                  ),
+                                  // Edit Button for Admins/Owners
+                                  if (group.ownerId == _user!.uid || group.admins.contains(_user!.uid))
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, size: 20, color: Colors.blueGrey),
+                                      tooltip: 'Rename Group',
+                                      onPressed: () => _renameGroup(group),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                                    ),
+                                ],
+                              ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.copy, size: 18),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                              icon: const Icon(Icons.copy, size: 20),
                               onPressed: () {
                                 Clipboard.setData(ClipboardData(text: group.id));
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -271,6 +325,8 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                                 );
                               },
                               tooltip: 'Copy Group ID',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                             ),
                           ],
                         ),
@@ -288,7 +344,7 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                                 return Stack(
                                   children: [
                                     IconButton(
-                                      icon: const Icon(Icons.person_outline, color: Colors.blue),
+                                      icon: const Icon(Icons.person_outline, color: Colors.blue, size: 22),
                                       onPressed: () {
                                         showDialog(
                                           context: context,
@@ -299,27 +355,30 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                                         );
                                       },
                                       tooltip: 'Placeholder Members',
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                                     ),
                                     // Show badge if admin/owner and there are pending inheritance requests
                                     if (isAdminOrOwner && inheritPendingCount > 0)
                                       Positioned(
-                                        right: 4,
-                                        top: 4,
+                                        right: 2,
+                                        top: 2,
                                         child: Container(
-                                          padding: const EdgeInsets.all(4),
+                                          padding: const EdgeInsets.all(3),
                                           decoration: const BoxDecoration(
                                             color: Colors.red,
                                             shape: BoxShape.circle,
                                           ),
                                           constraints: const BoxConstraints(
-                                            minWidth: 16,
-                                            minHeight: 16,
+                                            minWidth: 14,
+                                            minHeight: 14,
                                           ),
                                           child: Text(
                                             '$inheritPendingCount',
                                             style: const TextStyle(
                                               color: Colors.white,
-                                              fontSize: 10,
+                                              fontSize: 9,
                                               fontWeight: FontWeight.bold,
                                             ),
                                             textAlign: TextAlign.center,
@@ -341,7 +400,7 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                                 return Stack(
                                   children: [
                                     IconButton(
-                                      icon: const Icon(Icons.group, color: Colors.green),
+                                      icon: const Icon(Icons.group, color: Colors.green, size: 22),
                                       onPressed: () {
                                         showDialog(
                                           context: context,
@@ -352,27 +411,30 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                                         );
                                       },
                                       tooltip: 'Members',
+                                      visualDensity: VisualDensity.compact,
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                                     ),
                                     // Show badge if admin/owner and there are pending requests
                                     if (isAdminOrOwner && pendingCount > 0)
                                       Positioned(
-                                        right: 4,
-                                        top: 4,
+                                        right: 2,
+                                        top: 2,
                                         child: Container(
-                                          padding: const EdgeInsets.all(4),
+                                          padding: const EdgeInsets.all(3),
                                           decoration: const BoxDecoration(
                                             color: Colors.red,
                                             shape: BoxShape.circle,
                                           ),
                                           constraints: const BoxConstraints(
-                                            minWidth: 16,
-                                            minHeight: 16,
+                                            minWidth: 14,
+                                            minHeight: 14,
                                           ),
                                           child: Text(
                                             '$pendingCount',
                                             style: const TextStyle(
                                               color: Colors.white,
-                                              fontSize: 10,
+                                              fontSize: 9,
                                               fontWeight: FontWeight.bold,
                                             ),
                                             textAlign: TextAlign.center,
@@ -384,8 +446,11 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                               },
                             ),
                             IconButton(
-                              icon: const Icon(Icons.exit_to_app, color: Colors.red),
+                              icon: const Icon(Icons.exit_to_app, color: Colors.red, size: 22),
                               onPressed: () => _leaveGroup(group),
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                             ),
                           ],
                         ),

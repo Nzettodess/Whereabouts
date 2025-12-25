@@ -112,7 +112,7 @@ class BirthdayBabyDialog extends StatelessWidget {
                                       color: Colors.indigo,
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Text('🌙', style: TextStyle(fontSize: 10)),
+                                    child: const Text('🏮', style: TextStyle(fontSize: 10)),
                                   ),
                                 ),
                             ],

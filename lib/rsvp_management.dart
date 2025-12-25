@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
 import 'firestore_service.dart';
 import 'widgets/user_avatar.dart';
@@ -411,22 +412,26 @@ class _EventCardState extends State<EventCard> {
                         ],
                       ),
 
-                      // Action buttons for creator
-                      if (isCreator && noResponse > 0 && !isPastEvent) ...[
+                      // Action buttons for creator (always show, disable if no pending)
+                      if (isCreator && !isPastEvent) ...[
                         SizedBox(height: isVeryNarrow ? 8 : 12),
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
-                            onPressed: () => _sendReminders(widget.event, stats['noResponseUserIds']),
+                            onPressed: noResponse > 0 
+                                ? () => _sendReminders(widget.event, stats['noResponseUserIds'])
+                                : null, // Disabled if no pending
                             icon: Icon(Icons.notifications_active, size: isVeryNarrow ? 14 : 18),
                             label: Text(
-                              isVeryNarrow 
-                                ? 'Remind $noResponse' 
-                                : 'Send Reminder to $noResponse ${noResponse == 1 ? 'Person' : 'People'}',
+                              noResponse > 0
+                                  ? (isVeryNarrow 
+                                      ? 'Remind $noResponse' 
+                                      : 'Send Reminder to $noResponse ${noResponse == 1 ? 'Person' : 'People'}')
+                                  : 'All Responded ✓',
                               style: TextStyle(fontSize: isVeryNarrow ? 11 : 14),
                             ),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.blue,
+                              foregroundColor: noResponse > 0 ? Colors.blue : Colors.green,
                               padding: EdgeInsets.symmetric(vertical: isVeryNarrow ? 6 : 10),
                             ),
                           ),
@@ -595,11 +600,36 @@ class _EventCardState extends State<EventCard> {
 
   Future<void> _sendReminders(GroupEvent event, List<String> userIds) async {
     try {
+      // Check 1-day limit per event
+      final prefs = await SharedPreferences.getInstance();
+      final lastReminderKey = 'last_reminder_${event.id}';
+      final lastReminderMs = prefs.getInt(lastReminderKey) ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final oneDayMs = 24 * 60 * 60 * 1000;
+      
+      if (now - lastReminderMs < oneDayMs) {
+        // Too soon - show when they can send next
+        final nextAllowed = DateTime.fromMillisecondsSinceEpoch(lastReminderMs + oneDayMs);
+        final hoursLeft = nextAllowed.difference(DateTime.now()).inHours;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Reminder limit: Try again in ${hoursLeft}h'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
       await widget.firestoreService.sendRSVPReminder(
         event.id,
         event.title,
         userIds,
       );
+      
+      // Save timestamp
+      await prefs.setInt(lastReminderKey, now);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

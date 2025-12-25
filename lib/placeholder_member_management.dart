@@ -33,38 +33,49 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
   bool get isOwner => widget.group.ownerId == widget.currentUserId;
   bool get isAdmin => widget.group.admins.contains(widget.currentUserId);
   bool get canEdit => isOwner || isAdmin;
-  bool get canCreate => isOwner;
+  bool get canCreate => canEdit; // Owner or Admin can create (matches rule)
   bool get canDelete => isOwner;
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrow = screenWidth < 400;
+    
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(isNarrow ? 12 : 20)),
       child: Container(
-        padding: const EdgeInsets.all(20),
-        width: 500,
-        height: 600,
+        padding: EdgeInsets.all(isNarrow ? 12 : 20),
+        constraints: BoxConstraints(
+          maxWidth: 600,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+          minWidth: 0,
+        ),
+        width: MediaQuery.of(context).size.width * 0.9,
         child: Column(
           children: [
-            // Header
+            // Header - compact on mobile
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Placeholder Members",
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      widget.group.name,
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Placeholder Members",
+                        style: TextStyle(fontSize: isNarrow ? 16 : 20, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        widget.group.name,
+                        style: TextStyle(fontSize: isNarrow ? 12 : 14, color: Colors.grey[600]),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close),
+                  iconSize: isNarrow ? 20 : 24,
                   onPressed: () => Navigator.pop(context),
                 ),
               ],
@@ -79,13 +90,9 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
               child: StreamBuilder<List<PlaceholderMember>>(
                 stream: _firestoreService.getGroupPlaceholderMembers(widget.group.id),
                 builder: (context, snapshot) {
-                  // Show skeleton while loading
+                  // Show skeleton - DISABLED per user request
                   if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                    return const SkeletonDialogContent(itemCount: 3);
-                  }
-                  // Show skeleton if data is null but not waiting (transitional state)
-                  if (!snapshot.hasData) {
-                    return const SkeletonDialogContent(itemCount: 3);
+                    return const Center(child: CircularProgressIndicator());
                   }
                   
                   final placeholders = snapshot.data ?? [];
@@ -95,17 +102,17 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.person_add_disabled, size: 64, color: Colors.grey[400]),
-                          const SizedBox(height: 16),
+                          Icon(Icons.person_add_disabled, size: isNarrow ? 48 : 64, color: Colors.grey[400]),
+                          SizedBox(height: isNarrow ? 12 : 16),
                           Text(
                             "No placeholder members yet",
-                            style: TextStyle(color: Colors.grey[600]),
+                            style: TextStyle(color: Colors.grey[600], fontSize: isNarrow ? 13 : 14),
                           ),
                           if (canCreate) ...[
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               "Create one to represent a member who hasn't joined",
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                              style: TextStyle(fontSize: isNarrow ? 11 : 12, color: Colors.grey),
                               textAlign: TextAlign.center,
                             ),
                           ],
@@ -125,13 +132,24 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
               ),
             ),
             
-            // Create Button (Owner only)
+            // Create Button (Owner or Admin) - Solid color for dark mode
             if (canCreate) ...[
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _showCreateDialog,
-                icon: const Icon(Icons.person_add),
-                label: const Text("Create Placeholder"),
+              SizedBox(height: isNarrow ? 12 : 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _showCreateDialog,
+                  icon: Icon(Icons.person_add, size: isNarrow ? 18 : 20),
+                  label: Text(
+                    "Create Placeholder",
+                    style: TextStyle(fontSize: isNarrow ? 13 : 14),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: isNarrow ? 10 : 14),
+                  ),
+                ),
               ),
             ],
           ],
@@ -163,62 +181,81 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
   Widget _buildPlaceholderTile(PlaceholderMember placeholder) {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
+      elevation: 0, // Flatter look
+      color: Theme.of(context).cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.withOpacity(0.1)),
+      ),
       child: ListTile(
+        visualDensity: const VisualDensity(horizontal: 0, vertical: -2), // Compact
+        contentPadding: const EdgeInsets.fromLTRB(12, 4, 8, 4), // Compact padding
         onTap: () => _showUserProfile(placeholder),
         leading: CircleAvatar(
-          backgroundColor: Colors.grey[300],
-          child: const Icon(Icons.person_outline, color: Colors.grey),
+          radius: 18, // Slightly smaller
+          backgroundColor: Colors.grey[200],
+          child: const Icon(Icons.person_outline, color: Colors.grey, size: 20),
         ),
-        title: Text(placeholder.displayName),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (placeholder.defaultLocation != null)
-              Text(
-                placeholder.defaultLocation!,
-                style: const TextStyle(fontSize: 12),
-              ),
-            if (placeholder.birthday != null)
-              Text(
-                "Birthday: ${placeholder.birthday!.month}/${placeholder.birthday!.day}",
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              ),
-            if (placeholder.hasLunarBirthday && placeholder.lunarBirthdayMonth != null)
-              Text(
-                "Lunar: Month ${placeholder.lunarBirthdayMonth}, Day ${placeholder.lunarBirthdayDay}",
-                style: TextStyle(fontSize: 12, color: Colors.orange[700]),
-              ),
-          ],
+        title: Text(
+          placeholder.displayName, 
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)
         ),
+        subtitle: (placeholder.defaultLocation == null && placeholder.birthday == null && !placeholder.hasLunarBirthday) 
+            ? null 
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (placeholder.defaultLocation != null)
+                    Text(
+                      placeholder.defaultLocation!,
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                  if (placeholder.birthday != null || (placeholder.hasLunarBirthday && placeholder.lunarBirthdayMonth != null))
+                    Text(
+                      [
+                        if (placeholder.birthday != null) "🎂 ${placeholder.birthday!.month}/${placeholder.birthday!.day}",
+                        if (placeholder.hasLunarBirthday && placeholder.lunarBirthdayMonth != null) "🏮 ${placeholder.lunarBirthdayMonth}/${placeholder.lunarBirthdayDay}",
+                      ].join(' • '),
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                ],
+              ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Edit button (Owner + Admin)
+            // Edit button
             if (canEdit)
               IconButton(
                 icon: const Icon(Icons.edit, size: 20),
                 onPressed: () => _showEditDialog(placeholder),
                 tooltip: 'Edit',
+                color: Colors.blueGrey,
               ),
-            // Delete button (Owner only)
+            // Delete button
             if (canDelete)
               IconButton(
-                icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                icon: const Icon(Icons.delete_outline, size: 20),
                 onPressed: () => _confirmDelete(placeholder),
                 tooltip: 'Delete',
+                color: Colors.red,
               ),
-            // Request Inheritance button (Members only, not owner)
+            // Request Inheritance button
             if (!isOwner)
               IconButton(
-                icon: const Icon(Icons.download, size: 20, color: Colors.blue),
+                icon: const Icon(Icons.download, size: 20),
                 onPressed: () => _requestInheritance(placeholder),
                 tooltip: 'Request to Inherit',
+                color: Colors.blue,
               ),
           ],
         ),
       ),
     );
   }
+
+  // Helper removed as we returned to standard IconButton for better clickability on mobile
+  // The solid "Container" style was reported as hard to click.
 
   Widget _buildPendingRequestsSection() {
     // Use different queries based on role:
@@ -320,18 +357,16 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.check_circle, color: Colors.green, size: 22),
+                      icon: const Icon(Icons.check_circle, color: Colors.green, size: 24),
                       onPressed: () => _processRequest(request, true),
                       tooltip: 'Approve',
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.cancel, color: Colors.red, size: 22),
+                      icon: const Icon(Icons.cancel, color: Colors.red, size: 24),
                       onPressed: () => _processRequest(request, false),
                       tooltip: 'Reject',
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                     ),
                   ],
                 ),

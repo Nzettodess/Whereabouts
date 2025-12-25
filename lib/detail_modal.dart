@@ -1367,7 +1367,13 @@ class _DetailModalState extends State<DetailModal> {
                       : 'Unknown';
                   return Builder(
                     builder: (context) {
+                      final isDark = Theme.of(context).brightness == Brightness.dark;
                       return Card(
+                        color: isDark ? Colors.grey.shade900 : null,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: isDark ? BorderSide(color: Colors.grey.shade700) : BorderSide.none,
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Row(

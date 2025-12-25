@@ -145,22 +145,16 @@ class _MemberManagementState extends State<MemberManagement> {
       canEditThis = false;
     }
     
-    // Members see greyed out icon for higher roles
+    // Members don't see any options button
     if (!canManage) {
-      // Show greyed out icon to indicate they can view but not manage
-      return const SizedBox(
-        width: trailingWidth,
-        child: Icon(Icons.more_vert, color: Colors.grey),
-      );
+      // Return empty space to maintain alignment
+      return const SizedBox(width: trailingWidth);
     }
     
-    // If user can't edit this target (e.g., admin looking at another admin)
+    // If user can't edit this target (e.g., admin looking at owner or other admin)
     if (!canEditThis) {
-      // Show greyed out icon
-      return const SizedBox(
-        width: trailingWidth,
-        child: Icon(Icons.more_vert, color: Colors.grey),
-      );
+      // Hide button completely to avoid confusion
+      return const SizedBox(width: trailingWidth);
     }
     
     return PopupMenuButton<String>(
@@ -479,19 +473,17 @@ class _MemberManagementState extends State<MemberManagement> {
           ),
           // Approve button
           IconButton(
-            icon: const Icon(Icons.check_circle, color: Colors.green),
+            icon: const Icon(Icons.check_circle, color: Colors.green, size: 28),
             tooltip: 'Approve',
             onPressed: () => _processJoinRequest(request, true),
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           ),
           // Reject button
           IconButton(
-            icon: const Icon(Icons.cancel, color: Colors.red),
+            icon: const Icon(Icons.cancel, color: Colors.red, size: 28),
             tooltip: 'Reject',
             onPressed: () => _processJoinRequest(request, false),
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           ),
         ],
       ),
@@ -500,12 +492,9 @@ class _MemberManagementState extends State<MemberManagement> {
 
   Future<void> _processJoinRequest(JoinRequest request, bool approve) async {
     
-    // Get requester name for confirmation
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(request.requesterId)
-        .get();
-    final requesterName = userDoc.data()?['displayName'] ?? 'this user';
+    // Use requesterName already stored in the join request document
+    // (Fetching the user doc would fail because admin doesn't share groups with requester yet)
+    final requesterName = request.requesterName;
     
     final confirm = await showDialog<bool>(
       context: context,

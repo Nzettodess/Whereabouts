@@ -1406,7 +1406,8 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
                       Positioned(
                         right: 4,
                         top: 4,
-                        child: Container(
+                        child: IgnorePointer(
+                          child: Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
                             color: Colors.red,
@@ -1426,6 +1427,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
                             ),
                             textAlign: TextAlign.center,
                           ),
+                        ),
                         ),
                       ),
                   ],

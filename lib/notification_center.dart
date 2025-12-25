@@ -26,7 +26,7 @@ class NotificationCenter extends StatefulWidget {
 
 class _NotificationCenterState extends State<NotificationCenter> {
   final FirestoreService _firestoreService = FirestoreService();
-  bool _isMarkingAllRead = false;
+  // removed _isMarkingAllRead to rely on stream updates for snappier feel
 
   /// Get icon data based on notification type
   IconData _getIconForType(NotificationType type) {
@@ -93,18 +93,21 @@ class _NotificationCenterState extends State<NotificationCenter> {
 
   /// Mark all notifications as read
   Future<void> _markAllAsRead() async {
-    if (_isMarkingAllRead) return; // Prevent double-tap
-    
-    setState(() => _isMarkingAllRead = true);
-    
+    // Optimistic / Fire-and-forget for better perceived performance
+    // The stream will update the UI when the backend writes complete
     try {
       await NotificationService().markAllAsRead(widget.currentUserId);
     } catch (e) {
       print('Error marking all as read: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isMarkingAllRead = false);
-      }
+    }
+  }
+
+  /// Mark all notifications as unread
+  Future<void> _markAllAsUnread() async {
+     try {
+      await _firestoreService.markAllAsUnread(widget.currentUserId);
+    } catch (e) {
+      print('Error marking all as unread: $e');
     }
   }
 
@@ -205,6 +208,33 @@ class _NotificationCenterState extends State<NotificationCenter> {
     }
   }
 
+  Future<void> _confirmDeleteAll() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Delete All?"),
+        content: const Text("Are you sure you want to delete ALL notifications? This cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false), 
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Delete All", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      // Clear list immediately for UI responsiveness (optional, but stream will handle it)
+      // Call service
+      await _firestoreService.deleteAllNotifications(widget.currentUserId);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -216,9 +246,11 @@ class _NotificationCenterState extends State<NotificationCenter> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         constraints: BoxConstraints(
-          maxWidth: 500,
-          maxHeight: MediaQuery.of(context).size.height * 0.8,
+          maxWidth: 600, // Widened for PC per request
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+          minWidth: 0, 
         ),
+        width: MediaQuery.of(context).size.width * 0.9,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -236,31 +268,30 @@ class _NotificationCenterState extends State<NotificationCenter> {
                     children: [
                       // Mark all as read button
                       if (widget.canWrite)
-                        _isMarkingAllRead
-                            ? const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 12),
-                                child: SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              )
-                            : isNarrow 
-                                ? IconButton(
-                                    onPressed: _markAllAsRead,
-                                    icon: const Icon(Icons.done_all),
-                                    tooltip: 'Mark All Read',
-                                    color: Theme.of(context).colorScheme.primary,
-                                  )
-                                : TextButton.icon(
-                                    onPressed: _markAllAsRead,
-                                    icon: const Icon(Icons.done_all, size: 18),
-                                    label: const Text('Mark All Read'),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: Theme.of(context).colorScheme.primary,
-                                    ),
-                                  ),
+                      // Mark all as read button (Icon Only)
+                      if (widget.canWrite)
+                        IconButton(
+                          onPressed: _markAllAsRead,
+                          icon: const Icon(Icons.done_all),
+                          tooltip: 'Mark All Read',
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                       if (!isNarrow) const SizedBox(width: 8),
+                      // Mark All Unread Button (New)
+                      IconButton(
+                        onPressed: _markAllAsUnread,
+                        icon: const Icon(Icons.undo), // Or another suitable icon
+                        tooltip: 'Mark All Unread',
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      // Delete All Button (Trash Sweep)
+                      if (widget.canWrite)
+                        IconButton(
+                           icon: const Icon(Icons.delete_sweep),
+                           tooltip: 'Delete All',
+                           onPressed: _confirmDeleteAll,
+                           color: Colors.red,
+                        ),
                       IconButton(
                         icon: const Icon(Icons.close), 
                         onPressed: () => Navigator.pop(context),
@@ -278,37 +309,9 @@ class _NotificationCenterState extends State<NotificationCenter> {
                 stream: _firestoreService.getNotifications(widget.currentUserId),
                 builder: (context, snapshot) {
                   // Show skeleton while loading
+                  // Show skeleton while loading - DISABLED per user request
                   if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                    return ListView.separated(
-                      itemCount: 8,
-                      separatorBuilder: (context, index) => Divider(
-                        height: 1,
-                        color: isDark ? Colors.white10 : Colors.black12,
-                      ),
-                      itemBuilder: (context, index) => Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        child: Row(
-                          children: [
-                            // Icon container skeleton (40+10*2 padding = actual ~44px)
-                            const SkeletonCircle(size: 44),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SkeletonBox(width: double.infinity, height: 16),
-                                  const SizedBox(height: 8),
-                                  SkeletonBox(width: 80, height: 14),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            // Mark as read button skeleton
-                            const SkeletonCircle(size: 28),
-                          ],
-                        ),
-                      ),
-                    );
+                    return const Center(child: CircularProgressIndicator());
                   }
                   
                   if (snapshot.hasError) {
@@ -409,28 +412,52 @@ class _NotificationCenterState extends State<NotificationCenter> {
                           ),
                         ),
                         // Show mark as read button for unread notifications
-                        trailing: notification.read 
-                            ? null 
-                            : widget.canWrite 
-                                ? IconButton(
-                                    icon: Icon(
-                                      Icons.check_circle_outline,
-                                      color: Theme.of(context).colorScheme.primary,
-                                      size: 22,
-                                    ),
-                                    tooltip: 'Mark as read',
-                                    onPressed: () {
-                                      _firestoreService.markNotificationRead(notification.id);
-                                    },
-                                  )
-                                : Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: Theme.of(context).colorScheme.primary,
-                                      shape: BoxShape.circle,
-                                    ),
+                        // Trailing: Mark as Read (Check) OR Delete (Trash)
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                             // Mark as read/unread toggle
+                             if (widget.canWrite)
+                                IconButton(
+                                  icon: Icon(
+                                    notification.read ? Icons.circle_outlined : Icons.check_circle,
+                                    color: notification.read ? Colors.grey : Theme.of(context).colorScheme.primary,
+                                    size: 22,
                                   ),
+                                  tooltip: notification.read ? 'Mark as Unread' : 'Mark as Read',
+                                  onPressed: () {
+                                    if (notification.read) {
+                                      _firestoreService.markNotificationUnread(notification.id);
+                                    } else {
+                                      _firestoreService.markNotificationRead(notification.id);
+                                    }
+                                  },
+                                ),
+                             // Dot indicator (only if unread and not writable?) - Logic from before was weird, keeping it simple
+                             if (!notification.read && !widget.canWrite)
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.primary,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                             // Delete button (always visible)
+                             if (widget.canWrite)
+                               IconButton(
+                                 icon: Icon(
+                                   Icons.delete_outline,
+                                    color: Colors.grey.withOpacity(0.6),
+                                   size: 20,
+                                 ),
+                                 tooltip: 'Delete',
+                                 onPressed: () {
+                                   _firestoreService.deleteNotification(notification.id);
+                                 },
+                               ),
+                          ],
+                        ),
                         onTap: () => _handleNotificationTap(notification),
                       );
                     },

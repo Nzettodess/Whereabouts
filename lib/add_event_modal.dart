@@ -309,15 +309,14 @@ class _AddEventModalState extends State<AddEventModal> {
     final changes = <String>[];
     
     if (oldEvent.title != newEvent.title) {
-      changes.add("Title: ${oldEvent.title} -> ${newEvent.title}");
+      changes.add("Title Updated");
     }
     
     if (oldEvent.venue != newEvent.venue) {
-      final oldV = oldEvent.venue != null && oldEvent.venue!.isNotEmpty ? oldEvent.venue! : 'None';
-      final newV = newEvent.venue != null && newEvent.venue!.isNotEmpty ? newEvent.venue! : 'None';
-      // Only show if actually changed
+      final oldV = oldEvent.venue != null && oldEvent.venue!.isNotEmpty ? oldEvent.venue! : '';
+      final newV = newEvent.venue != null && newEvent.venue!.isNotEmpty ? newEvent.venue! : '';
       if (oldV != newV) {
-        changes.add("Venue: $oldV -> $newV");
+        changes.add("Venue Updated");
       }
     }
     
@@ -326,28 +325,28 @@ class _AddEventModalState extends State<AddEventModal> {
     final newDateStr = DateFormat('yyyy-MM-dd').format(newEvent.date);
     
     if (oldDateStr != newDateStr) {
-       changes.add("Date: $oldDateStr -> $newDateStr");
+       changes.add("Date Updated");
     }
     
-    // Compare times if hasTime changed or time value changed
+    // Compare times
     if (oldEvent.hasTime != newEvent.hasTime || 
        (oldEvent.hasTime && newEvent.hasTime && oldEvent.date != newEvent.date)) {
         if (newEvent.hasTime) {
-           final oldTime = oldEvent.hasTime ? DateFormat('HH:mm').format(oldEvent.date) : 'No time';
+           final oldTime = oldEvent.hasTime ? DateFormat('HH:mm').format(oldEvent.date) : '';
            final newTime = DateFormat('HH:mm').format(newEvent.date);
            if (oldTime != newTime) {
-             changes.add("Time: $oldTime -> $newTime");
+             changes.add("Time Updated");
            }
         } else {
-           changes.add("Time removed");
+           changes.add("Time Removed");
         }
     }
     
     if (oldEvent.description != newEvent.description) {
-      changes.add("Description updated");
+      changes.add("Description Updated");
     }
 
     if (changes.isEmpty) return null;
-    return changes.join("\n");
+    return changes.join(", ");
   }
 }

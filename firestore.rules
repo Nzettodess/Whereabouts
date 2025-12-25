@@ -58,6 +58,16 @@ service cloud.firestore {
       return isAuthenticated();
     }
     
+    // Check if target user has a pending join request to a group where current user is admin
+    // NOTE: This cannot be done efficiently in rules (would require querying join_requests).
+    // Instead, we embed the requester's name IN the join_request document at creation time,
+    // so admins don't need to read the user document directly.
+    // This function is a placeholder for documentation purposes.
+    function hasPendingJoinRequestToMyGroup(targetUserId) {
+      // Cannot be implemented efficiently in rules - handled at app level
+      return false;
+    }
+    
     // ============================================
     // 1. USERS COLLECTION
     // ============================================
@@ -169,9 +179,9 @@ service cloud.firestore {
       // Read: Strictly limited to group members
       allow read: if isAuthenticated() && isGroupMember(resource.data.groupId);
       
-      // Only Owner can create
+      // Owner or Admin can create
       allow create: if isAuthenticated() && 
-                       isGroupOwner(request.resource.data.groupId);
+                       isGroupAdmin(request.resource.data.groupId);
       
       // Owner or Admin can update
       allow update: if isAuthenticated() && 
@@ -282,6 +292,7 @@ service cloud.firestore {
                        request.resource.data.status == 'pending';
       
       // Only Owner/Admin can process (approve/reject)
+      // Restrict changes to specific fields only
       allow update: if isAuthenticated() && 
                        isGroupAdmin(resource.data.groupId) &&
                        request.resource.data.diff(resource.data).affectedKeys()
@@ -305,6 +316,21 @@ service cloud.firestore {
       
       // No updates or deletes
       allow update, delete: if false;
+    }
+    
+    // ============================================
+    // 10. NOTIFICATIONS COLLECTION (Top-level)
+    // ============================================
+    match /notifications/{notificationId} {
+      // User can read their own notifications (userId field matches)
+      allow read: if isAuthenticated() && resource.data.userId == userId();
+      
+      // Any authenticated user can create or update notifications
+      // (needed for batch.set with merge:true for deduplication)
+      allow create, update: if isAuthenticated();
+      
+      // User can delete their own notifications
+      allow delete: if isAuthenticated() && resource.data.userId == userId();
     }
   }
 }
