@@ -664,7 +664,7 @@ class _DetailModalState extends State<DetailModal> {
                               padding: EdgeInsets.zero,
                               onPressed: () async {
                                 if (!_checkCanWrite()) return;
-                                await _firestoreService.deleteEvent(e.id);
+                                await _firestoreService.deleteEvent(e.id, widget.currentUserId);
                                 if (mounted) Navigator.pop(context);
                               },
                             ),

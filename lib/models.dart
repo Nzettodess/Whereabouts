@@ -158,12 +158,18 @@ enum NotificationType {
   joinRequest,      // 👤 Join request received
   joinApproved,     // ✅ Join request approved
   joinRejected,     // ❌ Join request rejected
-  eventCreated,     // 📅 New event created
-  eventUpdated,     // 📅 Event updated
-  rsvpReceived,     // 📋 Someone RSVP'd to your event
-  locationChanged,  // 📍 Someone changed their location
-  birthdayToday,    // 🎂 It's someone's birthday
-  birthdayMonthly,  // 🎂 Monthly birthday summary
+  inheritanceRequest, // 🧬 Request to inherit placeholder
+  inheritanceApproved,// ✅ Inheritance approved
+  inheritanceRejected,// ❌ Inheritance rejected
+  roleChange,         // 👑 Promoted/Demoted/Transferred
+  removedFromGroup,   // 🚫 Removed from group
+  eventCreated,       // 📅 New event created
+  eventUpdated,       // 📅 Event updated
+  eventDeleted,       // 📅 Event deleted
+  rsvpReceived,       // 📋 Someone RSVP'd to your event
+  locationChanged,    // 📍 Someone changed their location
+  birthdayToday,      // 🎂 It's someone's birthday
+  birthdayMonthly,    // 🎂 Monthly birthday summary
   general,          // 🔔 General notification
 }
 
@@ -247,8 +253,17 @@ class AppNotification {
       case NotificationType.joinApproved:
       case NotificationType.joinRejected:
         return '👤';
+      case NotificationType.inheritanceRequest:
+      case NotificationType.inheritanceApproved:
+      case NotificationType.inheritanceRejected:
+        return '🧬';
+      case NotificationType.roleChange:
+        return '👑';
+      case NotificationType.removedFromGroup:
+        return '🚫';
       case NotificationType.eventCreated:
       case NotificationType.eventUpdated:
+      case NotificationType.eventDeleted:
         return '📅';
       case NotificationType.rsvpReceived:
         return '📋';

@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'models.dart';
 import 'models/placeholder_member.dart';
 import 'models/join_request.dart';
+import 'services/notification_service.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -24,6 +26,12 @@ class FirestoreService {
       );
       print("Group Map: ${group.toMap()}");
       await docRef.set(group.toMap());
+      
+      // Update creator's joinedGroupIds
+      await _db.collection('users').doc(userId).update({
+        'joinedGroupIds': FieldValue.arrayUnion([docRef.id]),
+      });
+      
       print("Group created successfully");
     } catch (e) {
       print("Error creating group: $e");
@@ -60,21 +68,26 @@ class FirestoreService {
     
     // Create join request
     final requestId = 'join_${_uuid.v4()}';
+    
+    // Get requester name for notification AND storage
+    final userDoc = await _db.collection('users').doc(userId).get();
+    final userName = userDoc.data()?['displayName'] ?? userDoc.data()?['email'] ?? 'Someone';
+    
     await _db.collection('join_requests').doc(requestId).set({
       'groupId': groupId,
       'requesterId': userId,
+      'requesterName': userName,
       'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
     });
     
     // Notify group owner
-    await sendNotification(
-      group.ownerId,
-      'New join request for ${group.name}',
-      type: NotificationType.joinRequest,
-      dedupeKey: 'join_${groupId}_$userId',
+    await NotificationService().notifyJoinRequest(
+      ownerId: group.ownerId,
       groupId: groupId,
-      relatedId: userId,
+      requesterId: userId,
+      requesterName: userName,
+      groupName: group.name,
     );
   }
 
@@ -137,6 +150,11 @@ class FirestoreService {
       'members': updatedMembers,
       'admins': updatedAdmins,
       'ownerId': updatedOwnerId,
+    });
+    
+    // Update user's joinedGroupIds
+    await _db.collection('users').doc(userId).update({
+        'joinedGroupIds': FieldValue.arrayRemove([groupId]),
     });
   }
 
@@ -203,6 +221,22 @@ class FirestoreService {
     return snapshot.docs.map((doc) => Group.fromFirestore(doc)).toList();
   }
 
+  /// Sync user's joinedGroupIds with actual group memberships
+  /// This repairs any desync and handles new joins
+  Future<void> syncUserGroups(String userId) async {
+    try {
+      final groups = await getUserGroupsSnapshot(userId);
+      final groupIds = groups.map((g) => g.id).toList();
+      
+      await _db.collection('users').doc(userId).set({
+        'joinedGroupIds': groupIds,
+      }, SetOptions(merge: true));
+      print('[FirestoreService] Synced ${groupIds.length} groups for user $userId');
+    } catch (e) {
+      print('[FirestoreService] Error syncing groups: $e');
+    }
+  }
+
   // --- Locations ---
 
   // Set Location - now updates for all groups user is in
@@ -228,6 +262,43 @@ class FirestoreService {
     }
     
     await batch.commit();
+
+    // Notify groups (Async)
+    _notifyLocationChange(userId, groups, date, nation, state);
+  }
+
+  /// Helper to notify groups of location change
+  Future<void> _notifyLocationChange(String userId, List<Group> groups, DateTime date, String nation, String? state) async {
+    try {
+      final userDoc = await _db.collection('users').doc(userId).get();
+      final userName = userDoc.data()?['displayName'] ?? userDoc.data()?['email'] ?? 'Someone';
+      
+      // Construct full location string
+      final locationStr = (state != null && state.isNotEmpty) ? '$state, $nation' : nation;
+      
+      // 1. Collect all unique recipients across all groups
+      final allMemberIds = <String>{};
+      for (final group in groups) {
+          allMemberIds.addAll(group.members);
+      }
+      // Remove self
+      allMemberIds.remove(userId);
+      
+      if (allMemberIds.isEmpty) return;
+
+      // 2. Send ONE notification broadcast to all unique recipients
+      // We attribute it to the first group for context, but the push is deduped.
+      await NotificationService().notifyLocationChanged(
+        memberIds: allMemberIds.toList(),
+        userId: userId,
+        userName: userName,
+        location: locationStr,
+        date: date,
+        groupId: groups.isNotEmpty ? groups.first.id : '',
+      );
+    } catch (e) {
+      print('Error notifying location change: $e');
+    }
   }
 
   // Set Location Range - updates location for multiple days
@@ -293,6 +364,42 @@ class FirestoreService {
       }
       
       await batch.commit();
+    }
+
+    // Notify groups of range change
+    _notifyLocationRangeChange(userId, groups, startDate, endDate, nation, state);
+  }
+
+  /// Helper to notify groups of location range change
+  Future<void> _notifyLocationRangeChange(String userId, List<Group> groups, DateTime start, DateTime end, String nation, String? state) async {
+     try {
+      final userDoc = await _db.collection('users').doc(userId).get();
+      final userName = userDoc.data()?['displayName'] ?? userDoc.data()?['email'] ?? 'Someone';
+      
+      // Construct full location string
+      final locationStr = (state != null && state.isNotEmpty) ? '$state, $nation' : nation;
+      
+      // 1. Collect all unique recipients
+      final allMemberIds = <String>{};
+      for (final group in groups) {
+          allMemberIds.addAll(group.members);
+      }
+      allMemberIds.remove(userId);
+      
+      if (allMemberIds.isEmpty) return;
+
+      // 2. Send ONE notification broadcast
+      await NotificationService().notifyLocationRangeChanged(
+        memberIds: allMemberIds.toList(),
+        userId: userId,
+        userName: userName,
+        location: locationStr,
+        startDate: start,
+        endDate: end,
+        groupId: groups.isNotEmpty ? groups.first.id : '',
+      );
+    } catch (e) {
+      print('Error notifying location range change: $e');
     }
   }
 
@@ -409,70 +516,118 @@ class FirestoreService {
     final groupDoc = await _db.collection('groups').doc(event.groupId).get();
     if (groupDoc.exists) {
       final group = Group.fromFirestore(groupDoc);
-      for (final memberId in group.members) {
-        if (memberId != event.creatorId) {
-          await sendNotification(
-            memberId, 
-            "New Event: ${event.title} in ${group.name}",
-            type: NotificationType.eventCreated,
-            groupId: event.groupId,
-            relatedId: event.id,
-          );
-        }
-      }
+      await NotificationService().notifyEventCreated(
+        memberIds: group.members,
+        creatorId: event.creatorId,
+        eventId: event.id,
+        eventTitle: event.title,
+        groupId: event.groupId,
+        groupName: group.name,
+      );
     }
   }
 
   /// Update event with rolling version history (keeps 2 previous versions)
   Future<void> updateEvent(GroupEvent event, String editedByUserId) async {
-    // Get current event data before updating
+    debugPrint('[FirestoreService] Updating event: ${event.title}');
+    
+    // Get current event data before updating for history
     final currentDoc = await _db.collection('events').doc(event.id).get();
+    List<Map<String, dynamic>> history = [];
     
     if (currentDoc.exists) {
       final currentData = currentDoc.data()!;
-      
-      // Create history entry from current version (before edit)
-      // Note: Can't use FieldValue.serverTimestamp() inside arrays
-      final historyEntry = {
-        'title': currentData['title'],
-        'description': currentData['description'],
-        'venue': currentData['venue'],
-        'date': currentData['date'],
-        'editedBy': currentData['lastEditedBy'] ?? currentData['creatorId'],
-        'editedAt': currentData['lastEditedAt'] ?? Timestamp.now(),
-      };
-      
-      // Get existing history and add new entry (max 2 entries)
-      List<Map<String, dynamic>> history = [];
       if (currentData['editHistory'] != null) {
         history = List<Map<String, dynamic>>.from(currentData['editHistory']);
       }
+      
+      // Create history entry from current version (before edit)
+      final historyEntry = Map<String, dynamic>.from(currentData);
+      historyEntry.remove('editHistory'); // Don't nest history
       history.insert(0, historyEntry);
-      if (history.length > 2) {
-        history = history.sublist(0, 2); // Keep only 2 most recent
-      }
-      
-      // Update event with new data and version tracking
-      final updateData = event.toMap();
-      updateData['lastEditedBy'] = editedByUserId;
-      updateData['lastEditedAt'] = FieldValue.serverTimestamp();
-      updateData['editHistory'] = history;
-      
-      await _db.collection('events').doc(event.id).update(updateData);
-    } else {
-      // Event doesn't exist, just create it
-      await _db.collection('events').doc(event.id).set(event.toMap());
+      if (history.length > 2) history = history.sublist(0, 2);
+    }
+
+    final updateData = event.toMap();
+    updateData['lastEditedBy'] = editedByUserId;
+    updateData['lastEditedAt'] = FieldValue.serverTimestamp();
+    updateData['editHistory'] = history;
+
+    await _db.collection('events').doc(event.id).update(updateData);
+
+    // Notify members
+    final groupDoc = await _db.collection('groups').doc(event.groupId).get();
+    if (groupDoc.exists) {
+      final group = Group.fromFirestore(groupDoc);
+      debugPrint('[FirestoreService] Notifying ${group.members.length} members for event update: ${event.title}');
+      await NotificationService().notifyEventUpdated(
+        memberIds: group.members,
+        editorId: editedByUserId,
+        eventId: event.id,
+        eventTitle: event.title,
+        groupId: event.groupId,
+      );
     }
   }
 
-  Future<void> deleteEvent(String eventId) async {
-    await _db.collection('events').doc(eventId).delete();
+  Future<void> deleteEvent(String eventId, String deleterId) async {
+    debugPrint('[FirestoreService] Deleting event: $eventId');
+    final eventDoc = await _db.collection('events').doc(eventId).get();
+    if (eventDoc.exists) {
+        final eventData = eventDoc.data()!;
+        final title = eventData['title'] ?? 'Event';
+        final groupId = eventData['groupId'] ?? '';
+        
+        await _db.collection('events').doc(eventId).delete();
+
+        // Notify
+        final groupDoc = await _db.collection('groups').doc(groupId).get();
+        if (groupDoc.exists) {
+            final group = Group.fromFirestore(groupDoc);
+            debugPrint('[FirestoreService] Notifying ${group.members.length} members for event deletion: $title');
+            await NotificationService().notifyEventDeleted(
+                memberIds: group.members,
+                deleterId: deleterId,
+                eventTitle: title,
+                groupId: groupId,
+            );
+        }
+    }
   }
 
   Future<void> rsvpEvent(String eventId, String userId, String status) async {
+    debugPrint('[FirestoreService] User $userId RSVPing to event $eventId with status: $status');
+    // Update RSVP
     await _db.collection('events').doc(eventId).update({
       'rsvps.$userId': status,
     });
+    
+    // Notify creator
+    try {
+      final eventDoc = await _db.collection('events').doc(eventId).get();
+      if (!eventDoc.exists) return;
+      
+      final event = GroupEvent.fromFirestore(eventDoc);
+      // Don't notify if creator is RSVPing to their own event
+      if (event.creatorId == userId) {
+        debugPrint('[FirestoreService] Skipping RSVP notification for event creator $userId');
+        return;
+      }
+      
+      final userDoc = await _db.collection('users').doc(userId).get();
+      final userName = userDoc.data()?['displayName'] ?? userDoc.data()?['email'] ?? 'Someone';
+      
+      debugPrint('[FirestoreService] Notifying event creator ${event.creatorId} of RSVP from $userName for event ${event.title}');
+      await NotificationService().notifyRSVP(
+        creatorId: event.creatorId,
+        responderName: userName,
+        eventTitle: event.title,
+        status: status,
+        eventId: eventId,
+      );
+    } catch (e) {
+      print('Error sending RSVP notification: $e');
+    }
   }
 
   Stream<List<GroupEvent>> getGroupEvents(String groupId, DateTime date) {
@@ -608,7 +763,7 @@ class FirestoreService {
     final placeholderIds = placeholdersSnapshot.docs.map((doc) => doc.id).toList();
     
     // Total = regular members + placeholders
-    final allMemberIds = [...group.members, ...placeholderIds];
+    final List<String> allMemberIds = [...group.members, ...placeholderIds];
     final totalMembers = allMemberIds.length;
     final noResponseUsers = event.getUsersWithNoResponse(allMemberIds);
     
@@ -819,6 +974,31 @@ class FirestoreService {
       'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
     });
+    
+    // Notify group admins
+    try {
+      // Get placeholder name
+      final phDoc = await _db.collection('placeholder_members').doc(placeholderMemberId).get();
+      final phName = phDoc.data()?['displayName'] ?? 'Unknown Member';
+      
+      // Get requester name
+      final userDoc = await _db.collection('users').doc(requesterId).get();
+      final userName = userDoc.data()?['displayName'] ?? userDoc.data()?['email'] ?? 'Someone';
+      
+      // Get group admins
+      final groupDoc = await _db.collection('groups').doc(groupId).get();
+      final group = Group.fromFirestore(groupDoc);
+      
+      await NotificationService().notifyInheritanceRequest(
+        adminIds: group.admins, // admins includes owner usually
+        requesterId: requesterId,
+        requesterName: userName,
+        placeholderName: phName,
+        groupId: groupId,
+      );
+    } catch (e) {
+      print('Error sending inheritance request notification: $e');
+    }
   }
 
   /// Get pending inheritance requests for a group (owner/admin view)
@@ -866,6 +1046,22 @@ class FirestoreService {
         request.requesterId,
         request.groupId,
       );
+      // Notification is handled in performInheritance for approval
+    } else {
+        // Handle rejection notification here
+        // Get placeholder name for msg
+        String phName = 'Member';
+        try {
+            final phDoc = await _db.collection('placeholder_members').doc(request.placeholderMemberId).get();
+            phName = phDoc.data()?['displayName'] ?? 'Member';
+        } catch (_) {}
+
+        await NotificationService().notifyInheritanceProcessed(
+            requesterId: request.requesterId,
+            placeholderName: phName, // Best effort
+            approved: false,
+            groupId: request.groupId,
+        );
     }
     
     // Update request status
@@ -959,11 +1155,12 @@ class FirestoreService {
     await batch.commit();
     
     // Send notification to the user
-    await sendNotification(
-      userId,
-      'You have successfully inherited data from "${placeholder.displayName}".',
-      type: NotificationType.general,
-      groupId: groupId,
+    // Send notification to the user
+    await NotificationService().notifyInheritanceProcessed(
+        requesterId: userId,
+        placeholderName: placeholder.displayName,
+        approved: true,
+        groupId: groupId,
     );
   }
 
@@ -1027,28 +1224,28 @@ class FirestoreService {
       await _db.collection('groups').doc(request.groupId).update({
         'members': FieldValue.arrayUnion([request.requesterId]),
       });
+      // Note: We used to update user's joinedGroupIds here, but Admins can't write to other Users.
+      // The user must sync their own group list on next app launch.
       
       // Get group name for notification
       final groupDoc = await _db.collection('groups').doc(request.groupId).get();
       final groupName = groupDoc.data()?['name'] ?? 'the group';
       
       // Notify the requester
-      await sendNotification(
-        request.requesterId,
-        'Your request to join "$groupName" has been approved! 🎉',
-        type: NotificationType.joinApproved,
-        groupId: request.groupId,
+      await NotificationService().notifyJoinProcessed(
+        requesterId: request.requesterId,
+        groupName: groupName,
+        approved: approved,
       );
     } else {
       // Notify rejection
       final groupDoc = await _db.collection('groups').doc(request.groupId).get();
       final groupName = groupDoc.data()?['name'] ?? 'the group';
       
-      await sendNotification(
-        request.requesterId,
-        'Your request to join "$groupName" has been declined.',
-        type: NotificationType.joinRejected,
-        groupId: request.groupId,
+      await NotificationService().notifyJoinProcessed(
+        requesterId: request.requesterId,
+        groupName: groupName,
+        approved: approved,
       );
     }
     
@@ -1059,6 +1256,7 @@ class FirestoreService {
       'processedAt': FieldValue.serverTimestamp(),
     });
   }
+
 
   /// Cancel user's pending join requests (when they want to withdraw)
   Future<void> cancelJoinRequest(String requestId) async {

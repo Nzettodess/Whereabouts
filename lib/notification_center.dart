@@ -4,6 +4,7 @@ import 'firestore_service.dart';
 import 'models.dart';
 import 'widgets/skeleton_loading.dart';
 import 'group_management.dart';
+import 'services/notification_service.dart';
 
 class NotificationCenter extends StatefulWidget {
   final String currentUserId;
@@ -33,9 +34,16 @@ class _NotificationCenterState extends State<NotificationCenter> {
       case NotificationType.joinRequest:
       case NotificationType.joinApproved:
       case NotificationType.joinRejected:
+      case NotificationType.roleChange:
+      case NotificationType.removedFromGroup:
+        return Icons.person;
+      case NotificationType.inheritanceRequest:
+      case NotificationType.inheritanceApproved:
+      case NotificationType.inheritanceRejected:
         return Icons.person_add;
       case NotificationType.eventCreated:
       case NotificationType.eventUpdated:
+      case NotificationType.eventDeleted:
         return Icons.event;
       case NotificationType.rsvpReceived:
         return Icons.how_to_reg;
@@ -58,10 +66,19 @@ class _NotificationCenterState extends State<NotificationCenter> {
       case NotificationType.joinApproved:
         return Colors.green;
       case NotificationType.joinRejected:
+      case NotificationType.inheritanceRejected:
+      case NotificationType.removedFromGroup:
         return Colors.red;
+      case NotificationType.inheritanceRequest:
+      case NotificationType.roleChange:
+        return Colors.blue;
+      case NotificationType.inheritanceApproved:
+        return Colors.green;
       case NotificationType.eventCreated:
       case NotificationType.eventUpdated:
         return Colors.purple;
+      case NotificationType.eventDeleted:
+        return Colors.red;
       case NotificationType.rsvpReceived:
         return Colors.teal;
       case NotificationType.locationChanged:
@@ -81,12 +98,9 @@ class _NotificationCenterState extends State<NotificationCenter> {
     setState(() => _isMarkingAllRead = true);
     
     try {
-      final snapshot = await _firestoreService.getNotifications(widget.currentUserId).first;
-      for (final notification in snapshot) {
-        if (!notification.read) {
-          await _firestoreService.markNotificationRead(notification.id);
-        }
-      }
+      await NotificationService().markAllAsRead(widget.currentUserId);
+    } catch (e) {
+      print('Error marking all as read: $e');
     } finally {
       if (mounted) {
         setState(() => _isMarkingAllRead = false);
@@ -114,6 +128,11 @@ class _NotificationCenterState extends State<NotificationCenter> {
 
   /// Handle notification tap - navigate based on type
   void _handleNotificationTap(AppNotification notification) {
+    // Mark as read if unread
+    if (!notification.read && widget.canWrite) {
+      _firestoreService.markNotificationRead(notification.id);
+    }
+
     // Close the notification dialog first
     Navigator.pop(context);
     
@@ -129,8 +148,28 @@ class _NotificationCenterState extends State<NotificationCenter> {
         );
         break;
         
+      case NotificationType.inheritanceRequest:
+        // Navigate to placeholder management logic - for now open group management
+         showDialog(
+          context: context,
+          builder: (context) => const GroupManagementDialog(),
+        );
+        break;
+
+      case NotificationType.roleChange:
+      case NotificationType.removedFromGroup:
+      case NotificationType.inheritanceApproved:
+      case NotificationType.inheritanceRejected:
+        // No specific action, maybe show dialog or just open group management
+         showDialog(
+          context: context,
+          builder: (context) => const GroupManagementDialog(),
+        );
+        break;
+        
       case NotificationType.eventCreated:
       case NotificationType.eventUpdated:
+      case NotificationType.eventDeleted:
       case NotificationType.rsvpReceived:
         // Navigate to the date of the event/RSVP
         // Try to parse date from notification timestamp or use today
@@ -170,19 +209,22 @@ class _NotificationCenterState extends State<NotificationCenter> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
+    final isNarrow = MediaQuery.of(context).size.width < 400;
+
     return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        width: 500,
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.7,
+          maxWidth: 500,
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -203,15 +245,22 @@ class _NotificationCenterState extends State<NotificationCenter> {
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 ),
                               )
-                            : TextButton.icon(
-                                onPressed: _markAllAsRead,
-                                icon: const Icon(Icons.done_all, size: 18),
-                                label: const Text('Mark All Read'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-                      const SizedBox(width: 8),
+                            : isNarrow 
+                                ? IconButton(
+                                    onPressed: _markAllAsRead,
+                                    icon: const Icon(Icons.done_all),
+                                    tooltip: 'Mark All Read',
+                                    color: Theme.of(context).colorScheme.primary,
+                                  )
+                                : TextButton.icon(
+                                    onPressed: _markAllAsRead,
+                                    icon: const Icon(Icons.done_all, size: 18),
+                                    label: const Text('Mark All Read'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Theme.of(context).colorScheme.primary,
+                                    ),
+                                  ),
+                      if (!isNarrow) const SizedBox(width: 8),
                       IconButton(
                         icon: const Icon(Icons.close), 
                         onPressed: () => Navigator.pop(context),
@@ -262,8 +311,21 @@ class _NotificationCenterState extends State<NotificationCenter> {
                     );
                   }
                   
-                  // Only show empty state when we've CONFIRMED data is loaded and empty
-                  if (snapshot.hasData && snapshot.data!.isEmpty) {
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Text(
+                          "Error: ${snapshot.error}",
+                          style: const TextStyle(color: Colors.red, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    );
+                  }
+
+                  // Show empty state if no notifications
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,

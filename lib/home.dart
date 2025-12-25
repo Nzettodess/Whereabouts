@@ -1187,8 +1187,9 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
                   country,
                   state,
                 );
+                // Notification is handled internally by FirestoreService now
               }
-            }
+            } // end for loop
             
             if (mounted) {
               final dayCount = endDate.difference(startDate).inDays + 1;
@@ -1202,14 +1203,15 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
                   content: Text(
                     "Location set for $memberCount member${memberCount > 1 ? 's' : ''} " 
                     "to ${state != null ? '$state, ' : ''}$country for $dateRange"
-                  )
+                  ),
+                  backgroundColor: Colors.green,
                 )
               );
             }
           } catch (e) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("Error saving location: $e"))
+                SnackBar(content: Text("Error saving location: $e"), backgroundColor: Colors.red)
               );
             }
           }

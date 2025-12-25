@@ -62,8 +62,16 @@ service cloud.firestore {
     // 1. USERS COLLECTION
     // ============================================
     match /users/{uid} {
-      // All group members can see full profiles of users in same group
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        userId() == uid || 
+        // 1. LEGACY/TRANSITION: DISABLED.
+        // !("joinedGroupIds" in resource.data) ||
+        // 2. SECURED: If target has groups, requester must share at least one.
+        (
+          "joinedGroupIds" in get(/databases/$(database)/documents/users/$(userId())).data && 
+          resource.data.joinedGroupIds.hasAny(get(/databases/$(database)/documents/users/$(userId())).data.joinedGroupIds)
+        )
+      );
       
       // User can only create their own document
       allow create: if isAuthenticated() && userId() == uid;
@@ -74,7 +82,7 @@ service cloud.firestore {
         userId() == uid ||
         // Owner/Admin can update ONLY these specific fields for other members
         request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['defaultLocation', 'birthday', 'hasLunarBirthday', 'lunarBirthdayMonth', 'lunarBirthdayDay'])
+          .hasOnly(['defaultLocation', 'birthday', 'hasLunarBirthday', 'lunarBirthdayMonth', 'lunarBirthdayDay', 'joinedGroupIds'])
       );
       
       // Delete not allowed (handled by account deletion flow)

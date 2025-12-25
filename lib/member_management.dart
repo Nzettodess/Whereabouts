@@ -7,6 +7,7 @@ import 'firestore_service.dart';
 import 'edit_member_dialog.dart';
 import 'widgets/user_profile_dialog.dart';
 import 'theme.dart';
+import 'services/notification_service.dart';
 
 class MemberManagement extends StatefulWidget {
   final Group group;
@@ -276,6 +277,15 @@ class _MemberManagementState extends State<MemberManagement> {
         'admins': FieldValue.arrayUnion([memberId]),
       });
       await _refreshGroup();
+      
+      // Notify user
+      await NotificationService().notifyRoleChange(
+        userId: memberId,
+        groupName: _group.name,
+        roleAction: 'promoted to admin of',
+        groupId: _group.id,
+      );
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('User promoted to admin')),
@@ -301,6 +311,15 @@ class _MemberManagementState extends State<MemberManagement> {
         'admins': FieldValue.arrayRemove([memberId]),
       });
       await _refreshGroup();
+      
+      // Notify user
+      await NotificationService().notifyRoleChange(
+        userId: memberId,
+        groupName: _group.name,
+        roleAction: 'removed as admin from',
+        groupId: _group.id,
+      );
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Admin rights removed')),
@@ -355,6 +374,14 @@ class _MemberManagementState extends State<MemberManagement> {
     });
     await _refreshGroup();
     _memberDetails.remove(memberId);
+    
+    // Notify user
+    await NotificationService().notifyMemberRemoved(
+      userId: memberId,
+      groupName: _group.name,
+      groupId: _group.id,
+    );
+    
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Member removed from group')),
@@ -402,6 +429,15 @@ class _MemberManagementState extends State<MemberManagement> {
       'admins': FieldValue.arrayUnion([widget.currentUserId, memberId]),
     });
     await _refreshGroup();
+    
+    // Notify new owner
+    await NotificationService().notifyRoleChange(
+      userId: memberId,
+      groupName: _group.name,
+      roleAction: 'made the owner of',
+      groupId: _group.id,
+    );
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ownership transferred')),
@@ -411,70 +447,54 @@ class _MemberManagementState extends State<MemberManagement> {
   }
 
   Widget _buildJoinRequestTile(JoinRequest request) {
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance.collection('users').doc(request.requesterId).get(),
-      builder: (context, snapshot) {
-        String requesterName = 'Loading...';
-        String requesterEmail = '';
-        
-        if (snapshot.hasData && snapshot.data!.exists) {
-          final data = snapshot.data!.data() as Map<String, dynamic>;
-          requesterName = data['displayName'] ?? data['email'] ?? 'Unknown User';
-          requesterEmail = data['email'] ?? '';
-        }
-        
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: AppColors.getPendingBg(context),
-                child: Icon(Icons.person_outline, size: 18, color: AppColors.getPendingAccent(context)),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      requesterName,
-                      style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (requesterEmail.isNotEmpty)
-                      Text(
-                        requesterEmail,
-                        style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    Text(
-                      'Requested ${DateFormat('MMM d').format(request.createdAt)}',
-                      style: TextStyle(fontSize: 10, color: Theme.of(context).hintColor),
-                    ),
-                  ],
-                ),
-              ),
-              // Approve button
-              IconButton(
-                icon: const Icon(Icons.check_circle, color: Colors.green),
-                tooltip: 'Approve',
-                onPressed: () => _processJoinRequest(request, true),
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                padding: EdgeInsets.zero,
-              ),
-              // Reject button
-              IconButton(
-                icon: const Icon(Icons.cancel, color: Colors.red),
-                tooltip: 'Reject',
-                onPressed: () => _processJoinRequest(request, false),
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                padding: EdgeInsets.zero,
-              ),
-            ],
+    // Legacy support: if name is 'Unknown User' (default for old records) but we have permission to read,
+    // we could try to fetch. But for now, we rely on the embedded name or 'Unknown'.
+    // If we closed the leak, fetching would likely fail anyway for non-members.
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: AppColors.getPendingBg(context),
+            child: Icon(Icons.person_outline, size: 18, color: AppColors.getPendingAccent(context)),
           ),
-        );
-      },
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  request.requesterName,
+                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  'Requested ${DateFormat('MMM d').format(request.createdAt)}',
+                  style: TextStyle(fontSize: 10, color: Theme.of(context).hintColor),
+                ),
+              ],
+            ),
+          ),
+          // Approve button
+          IconButton(
+            icon: const Icon(Icons.check_circle, color: Colors.green),
+            tooltip: 'Approve',
+            onPressed: () => _processJoinRequest(request, true),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            padding: EdgeInsets.zero,
+          ),
+          // Reject button
+          IconButton(
+            icon: const Icon(Icons.cancel, color: Colors.red),
+            tooltip: 'Reject',
+            onPressed: () => _processJoinRequest(request, false),
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            padding: EdgeInsets.zero,
+          ),
+        ],
+      ),
     );
   }
 

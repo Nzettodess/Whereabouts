@@ -6,6 +6,7 @@ class JoinRequest {
   final String id;
   final String groupId;
   final String requesterId;
+  final String requesterName;
   final String status; // 'pending', 'approved', 'rejected'
   final DateTime createdAt;
   final String? processedBy;
@@ -15,6 +16,7 @@ class JoinRequest {
     required this.id,
     required this.groupId,
     required this.requesterId,
+    required this.requesterName,
     required this.status,
     required this.createdAt,
     this.processedBy,
@@ -27,6 +29,7 @@ class JoinRequest {
       id: doc.id,
       groupId: data['groupId'] ?? '',
       requesterId: data['requesterId'] ?? '',
+      requesterName: data['requesterName'] ?? 'Unknown User',
       status: data['status'] ?? 'pending',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       processedBy: data['processedBy'],
@@ -38,6 +41,7 @@ class JoinRequest {
     return {
       'groupId': groupId,
       'requesterId': requesterId,
+      'requesterName': requesterName,
       'status': status,
       'createdAt': Timestamp.fromDate(createdAt),
       'processedBy': processedBy,

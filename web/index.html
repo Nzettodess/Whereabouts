@@ -556,45 +556,40 @@
     // Expose function to get player ID for Flutter
     window.getOneSignalPlayerId = async function () {
       try {
-        console.log('[HTML] getOneSignalPlayerId called. Waiting for SDK...');
-        // Wait for OneSignal to be ready
+        console.log('[OneSignal] getOneSignalPlayerId invoked. Waiting for SDK queue...');
         await new Promise(resolve => window.OneSignalDeferred.push(() => resolve()));
 
-        console.log('[HTML] OneSignal SDK ready.');
         const subscription = OneSignal.User.PushSubscription;
-        console.log('[HTML] Initial Subscription State:', {
+        console.log('[OneSignal] SDK Ready. Current Subscription State:', {
           id: subscription.id,
           token: subscription.token,
-          optedIn: subscription.optedIn,
-          permission: Notification.permission
+          optedIn: subscription.optedIn
         });
 
         if (subscription.id) {
-          console.log('[HTML] Returning existing ID:', subscription.id);
+          console.log('[OneSignal] Returning existing Subscription ID:', subscription.id);
           return subscription.id;
         }
 
-        // Wait up to 5 seconds for ID to be available (25 checks * 200ms)
-        for (let i = 0; i < 25; i++) {
-          const currentId = OneSignal.User.PushSubscription.id;
+        console.log('[OneSignal] No ID yet. Waiting up to 15s for subscription change...');
+        return new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            console.warn('[OneSignal] Timeout waiting for Subscription ID.');
+            resolve(null);
+          }, 15000);
 
-          if (currentId) {
-            console.log('[HTML] Found Player ID after ' + (i * 200) + 'ms:', currentId);
-            return currentId;
-          }
-
-          console.log('[HTML] Waiting for ID... Attempt ' + (i + 1) + '/25. Status:', {
-            optedIn: OneSignal.User.PushSubscription.optedIn,
-            permission: Notification.permission
-          });
-
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
-
-        console.warn('[HTML] Timeout: OneSignal Player ID never appeared.');
-        return null;
+          // One way to wait for subscription (SDK v16+)
+          const checkInterval = setInterval(() => {
+            if (OneSignal.User.PushSubscription.id) {
+              clearInterval(checkInterval);
+              clearTimeout(timeout);
+              console.log('[OneSignal] Subscription ID detected via interval:', OneSignal.User.PushSubscription.id);
+              resolve(OneSignal.User.PushSubscription.id);
+            }
+          }, 500);
+        });
       } catch (e) {
-        console.error('[HTML] Error getting OneSignal player ID:', e);
+        console.error('[OneSignal] Error in getOneSignalPlayerId:', e);
         return null;
       }
     };

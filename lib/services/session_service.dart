@@ -2,12 +2,19 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../firestore_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Service to detect and manage multiple active sessions
 class SessionService {
   final String userId;
-  final String sessionId = const Uuid().v4();
-  String get currentSessionId => sessionId;
+  String? _sessionId;
+  
+  // Getter that throws if accessed before init (should use initialize() pattern or future)
+  // For this refactor, we'll keep it simple: assume startSession does the work.
+  // Actually, we need to know the ID for references.
+  
+  String get currentSessionId => _sessionId ?? 'initializing';
   Timer? _heartbeatTimer;
   StreamSubscription? _sessionListener;
   StreamSubscription? _terminationListener;
@@ -21,7 +28,22 @@ class SessionService {
       .doc(userId)
       .collection('active_sessions');
 
-  DocumentReference get _sessionRef => _sessionsCollection.doc(sessionId);
+  Future<String> _getOrGenerateSessionId() async {
+    if (_sessionId != null) return _sessionId!;
+    
+    final prefs = await SharedPreferences.getInstance();
+    String? storedId = prefs.getString('device_session_id');
+    
+    if (storedId == null) {
+      storedId = const Uuid().v4();
+      await prefs.setString('device_session_id', storedId);
+    }
+    
+    _sessionId = storedId;
+    return storedId;
+  }
+
+  DocumentReference get _sessionRef => _sessionsCollection.doc(_sessionId);
 
   /// Start tracking this session
   Future<void> startSession({
@@ -32,19 +54,36 @@ class SessionService {
     _isActive = true;
     _onTerminated = onSessionTerminated;
 
-    print('[SessionService] Starting session: $sessionId');
+    // Initialize Session ID
+    final sid = await _getOrGenerateSessionId();
+    print('[SessionService] Starting session: $sid');
 
     // First, clean up stale sessions (older than 2 minutes)
     await _cleanupStaleSessions();
+    
+    // Sync User Groups (Self-Correction for Security Rules)
+    // We launch this without awaiting to not block session start, or await it to ensure consistency?
+    // Await is safer.
+    await FirestoreService().syncUserGroups(userId);
 
-    // Register this session
+    // Register this session (Update or Create)
+    // We use set with merge, so if it exists (refreshed page), we just update timestamp
     final now = DateTime.now();
     try {
       await _sessionRef.set({
         'device': _getDeviceInfo(),
         'lastActive': Timestamp.fromDate(now),
-        'createdAt': Timestamp.fromDate(now),
-      });
+        'createdAt': FieldValue.serverTimestamp(), // Update created if new, but we want to know launch. 
+        // Actually, for session tracking, refreshing 'createdAt' on revive is okay, or just keep original.
+        // Let's just update lastActive mostly.
+      }, SetOptions(merge: true));
+      
+      // Ensure 'createdAt' exists if it's a fresh doc
+      // Check if createdAt is set, if not, set it?
+      // Since we use merge, if doc doesn't exist, it creates.
+      // We will blindly set createdAt to now on start to indicate "App Launch"
+      await _sessionRef.update({'createdAt': Timestamp.fromDate(now)});
+      
     } catch (e) {
       print('[SessionService] Error creating session: $e');
       _isActive = false;
@@ -94,7 +133,7 @@ class SessionService {
             activeSessions.add({
               'id': doc.id,
               'device': device,
-              'isCurrentSession': doc.id == sessionId,
+              'isCurrentSession': doc.id == _sessionId,
             });
           } else {
             final isActive = now.difference(activeTime.toDate()).inMinutes < 2;
@@ -102,7 +141,7 @@ class SessionService {
               activeSessions.add({
                 'id': doc.id,
                 'device': device,
-                'isCurrentSession': doc.id == sessionId,
+                'isCurrentSession': doc.id == _sessionId,
               });
             }
           }
@@ -145,7 +184,7 @@ class SessionService {
     try {
       final snapshot = await _sessionsCollection.get();
       for (final doc in snapshot.docs) {
-        if (doc.id != sessionId) {
+        if (doc.id != _sessionId) {
           await doc.reference.delete();
         }
       }

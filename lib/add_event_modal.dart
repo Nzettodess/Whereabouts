@@ -100,15 +100,28 @@ class _AddEventModalState extends State<AddEventModal> {
         // --- Trigger Notification ---
         try {
           final selectedGroup = _userGroups.firstWhere((g) => g.id == _selectedGroupId!);
+          
+          debugPrint('DEBUG: Update Target Group: ${selectedGroup.name}');
+
+          // Calculate changes for notification
+          final changes = _generateChangeSummary(widget.eventToEdit!, updatedEvent);
+          
           await NotificationService().notifyEventUpdated(
             memberIds: selectedGroup.members,
             editorId: widget.currentUserId,
             eventId: updatedEvent.id,
             eventTitle: updatedEvent.title,
             groupId: selectedGroup.id,
+            changeSummary: changes,
           );
+          
         } catch (e) {
             debugPrint('Error sending update notification: $e');
+            if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Update Push Failed: $e'), backgroundColor: Colors.red),
+                );
+            }
         }
       } else {
         // Create new event
@@ -130,6 +143,11 @@ class _AddEventModalState extends State<AddEventModal> {
           // Get group details to send notifications
           final selectedGroup = _userGroups.firstWhere((g) => g.id == _selectedGroupId!);
           
+          debugPrint('DEBUG: Target Group: ${selectedGroup.name}');
+          debugPrint('DEBUG: Raw Members: ${selectedGroup.members}');
+          
+          debugPrint('DEBUG: Raw Members: ${selectedGroup.members}');
+
           await NotificationService().notifyEventCreated(
             memberIds: selectedGroup.members,
             creatorId: widget.currentUserId,
@@ -138,11 +156,20 @@ class _AddEventModalState extends State<AddEventModal> {
             groupId: selectedGroup.id,
             groupName: selectedGroup.name,
           );
+          
+          debugPrint('DEBUG: notifyEventCreated completed successfully');
         } catch (e) {
           debugPrint('Error sending event notification: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Push Failed: $e'), backgroundColor: Colors.red),
+            );
+          }
         }
       }
       
+      // Small delay to let SnackBar be seen (optional, but helpful for debug)
+      await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) Navigator.pop(context);
     }
   }
@@ -273,5 +300,54 @@ class _AddEventModalState extends State<AddEventModal> {
         ),
       ),
     );
+  }
+
+  // Helper to calculate changes between two event versions
+  String? _generateChangeSummary(GroupEvent oldEvent, GroupEvent newEvent) {
+    if (oldEvent == newEvent) return null;
+    
+    final changes = <String>[];
+    
+    if (oldEvent.title != newEvent.title) {
+      changes.add("Title: ${oldEvent.title} -> ${newEvent.title}");
+    }
+    
+    if (oldEvent.venue != newEvent.venue) {
+      final oldV = oldEvent.venue != null && oldEvent.venue!.isNotEmpty ? oldEvent.venue! : 'None';
+      final newV = newEvent.venue != null && newEvent.venue!.isNotEmpty ? newEvent.venue! : 'None';
+      // Only show if actually changed
+      if (oldV != newV) {
+        changes.add("Venue: $oldV -> $newV");
+      }
+    }
+    
+    // Compare dates
+    final oldDateStr = DateFormat('yyyy-MM-dd').format(oldEvent.date);
+    final newDateStr = DateFormat('yyyy-MM-dd').format(newEvent.date);
+    
+    if (oldDateStr != newDateStr) {
+       changes.add("Date: $oldDateStr -> $newDateStr");
+    }
+    
+    // Compare times if hasTime changed or time value changed
+    if (oldEvent.hasTime != newEvent.hasTime || 
+       (oldEvent.hasTime && newEvent.hasTime && oldEvent.date != newEvent.date)) {
+        if (newEvent.hasTime) {
+           final oldTime = oldEvent.hasTime ? DateFormat('HH:mm').format(oldEvent.date) : 'No time';
+           final newTime = DateFormat('HH:mm').format(newEvent.date);
+           if (oldTime != newTime) {
+             changes.add("Time: $oldTime -> $newTime");
+           }
+        } else {
+           changes.add("Time removed");
+        }
+    }
+    
+    if (oldEvent.description != newEvent.description) {
+      changes.add("Description updated");
+    }
+
+    if (changes.isEmpty) return null;
+    return changes.join("\n");
   }
 }

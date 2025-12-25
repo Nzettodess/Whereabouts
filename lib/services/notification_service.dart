@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'package:web/web.dart' as web;
+import 'package:intl/intl.dart';
 import '../models.dart';
 
 /// Service for managing push notifications (FCM) and in-app notifications
@@ -102,7 +103,11 @@ class NotificationService {
   }
 
   Future<void> initialize(String userId) async {
-    if (_initialized && _currentUserId == userId && _oneSignalPlayerId != null) return;
+    debugPrint('--- NOTIFICATION SERVICE INIT START (User: $userId) ---');
+    if (_initialized && _currentUserId == userId && _oneSignalPlayerId != null) {
+      debugPrint('Already initialized and healthy. Skipping.');
+      return;
+    }
     
     _currentUserId = userId;
     
@@ -111,18 +116,21 @@ class NotificationService {
 
     // Get OneSignal player ID and save to Firestore (web only)
     if (kIsWeb) {
+      debugPrint('Linking OneSignal Identity to Firebase UID: $userId');
       // Login to OneSignal to associate device with Firebase UID
       await _callJsLoginOneSignal(userId);
 
+      debugPrint('Fetching OneSignal Player ID (OneSignal internal ID)...');
       await _getAndSaveOneSignalPlayerId();
       
       // Sync push status to OneSignal
       final enabled = await isPushEnabled();
+      debugPrint('Push enabled preference: $enabled');
       await setPushEnabled(enabled);
     }
     
     _initialized = true;
-    debugPrint('NotificationService initialized for user: $userId');
+    debugPrint('--- NOTIFICATION SERVICE INIT COMPLETE ---');
   }
 
   // FCM token persistence has been removed - using OneSignal as primary provider
@@ -130,6 +138,7 @@ class NotificationService {
   /// Reset service when user logs out
   Future<void> removeToken() async {
     if (_currentUserId == null) return;
+    debugPrint('Removing notification tokens for user: $_currentUserId');
     
     // Remove OneSignal player ID
     if (_oneSignalPlayerId != null) {
@@ -156,7 +165,7 @@ class NotificationService {
         'oneSignalPlayerIds': [],
       });
       _oneSignalPlayerId = null;
-      debugPrint('Cleared all OneSignal player IDs for user: $_currentUserId');
+      debugPrint('Cleared all OneSignal player IDs in Firestore for user: $_currentUserId');
     } catch (e) {
       debugPrint('Error clearing OneSignal player IDs: $e');
     }
@@ -171,22 +180,25 @@ class NotificationService {
     try {
       // First try to get ID if already granted
       String? result = await _callJsGetPlayerId();
+      debugPrint('Initial GetPlayerId Result: $result');
       
       // If no ID or result is a status string, request permission
       if (result == null || result == 'default' || result == 'denied') {
-        debugPrint('Requesting OneSignal permission/status...');
+        debugPrint('ID not available yet. Requesting permission/status...');
         result = await _callJsRequestPermission();
+        debugPrint('RequestPermission Result: $result');
       }
       
       // Validation: Ensure it's a reasonably long string, not a status string like "granted"
       if (result != null && result.length > 15) {
+        debugPrint('Valid OneSignal Player ID obtained: $result');
         _oneSignalPlayerId = result;
         await _saveOneSignalPlayerIdToFirestore(result);
       } else {
-        debugPrint('OneSignal returned non-ID result or too short: $result');
+        debugPrint('OneSignal returned non-ID result or too short: $result (Permission likely not granted)');
       }
     } catch (e) {
-      debugPrint('Error getting OneSignal player ID: $e');
+      debugPrint('CRITICAL ERROR in _getAndSaveOneSignalPlayerId: $e');
     }
   }
 
@@ -197,7 +209,9 @@ class NotificationService {
       final jsWindow = web.window as JSObject;
       if (jsWindow.hasProperty('loginOneSignal'.toJS).toDart) {
         jsWindow.callMethod('loginOneSignal'.toJS, externalId.toJS);
-        debugPrint('Logged in to OneSignal with External ID: $externalId');
+        debugPrint('JS: Called loginOneSignal with External ID: $externalId');
+      } else {
+        debugPrint('JS ERROR: loginOneSignal function NOT FOUND in index.html');
       }
     } catch (e) {
       debugPrint('Error calling JS loginOneSignal: $e');
@@ -211,7 +225,7 @@ class NotificationService {
     try {
       final jsWindow = web.window as JSObject;
       if (!jsWindow.hasProperty('requestPushPermission'.toJS).toDart) {
-        debugPrint('JS requestPushPermission function not found');
+        debugPrint('JS ERROR: requestPushPermission function NOT FOUND');
         return null;
       }
       
@@ -223,7 +237,7 @@ class NotificationService {
         return value?.toString();
       }
     } catch (e) {
-      debugPrint('JS requestPushPermission error: $e');
+      debugPrint('JS requestPushPermission EXCEPTION: $e');
     }
     return null;
   }
@@ -235,7 +249,7 @@ class NotificationService {
     try {
       final jsWindow = web.window as JSObject;
       if (!jsWindow.hasProperty('getOneSignalPlayerId'.toJS).toDart) {
-        debugPrint('JS getOneSignalPlayerId function not found');
+        debugPrint('JS ERROR: getOneSignalPlayerId function NOT FOUND');
         return null;
       }
 
@@ -246,15 +260,14 @@ class NotificationService {
         final playerId = await jsPromise.toDart.timeout(
           const Duration(seconds: 10),
           onTimeout: () {
-              debugPrint('JS getOneSignalPlayerId timed out on Dart side (10s limit).');
+              debugPrint('JS TIMEOUT: getOneSignalPlayerId timed out (10s limit).');
               return null;
           }
         );
-        debugPrint('JS getOneSignalPlayerId returned: $playerId');
         return playerId?.toString();
       }
     } catch (e) {
-      debugPrint('JS getOneSignalPlayerId error: $e');
+      debugPrint('JS getOneSignalPlayerId EXCEPTION: $e');
     }
     return null;
   }
@@ -268,9 +281,9 @@ class NotificationService {
         'oneSignalPlayerIds': FieldValue.arrayUnion([playerId]),
         'lastOneSignalUpdate': FieldValue.serverTimestamp(),
       });
-      debugPrint('OneSignal player ID saved for user: $_currentUserId');
+      debugPrint('OneSignal player ID ($playerId) persisted to Firestore for $_currentUserId');
     } catch (e) {
-      debugPrint('Error saving OneSignal player ID: $e');
+      debugPrint('Error saving player ID to Firestore: $e');
     }
   }
 
@@ -282,8 +295,15 @@ class NotificationService {
     Map<String, dynamic>? data,
   }) async {
     if (playerIds.isEmpty) {
-      debugPrint('PUSH ERROR: playerIds is empty');
-      return 'Error: No playerIds';
+      debugPrint('PUSH SKIP: playerIds list is empty');
+      return 'Error: No recipients';
+    }
+
+    // ENSURE PUSH IS ENABLED IN SETTINGS
+    final bool pushEnabled = await isPushEnabled();
+    if (!pushEnabled) {
+      debugPrint('PUSH SKIP: User disabled push notifications in settings');
+      return 'Skipped (Disabled in Settings)';
     }
     
     try {
@@ -295,28 +315,32 @@ class NotificationService {
                  (_pushApiUrl.startsWith('/') ? _pushApiUrl.substring(1) : _pushApiUrl);
       }
       
-      debugPrint('Sending push to $apiUrl for ${playerIds.length} players');
+      debugPrint('--- CALLING PUSH API ---');
+      debugPrint('Endpoint: $apiUrl');
+      debugPrint('Recipients (UIDs): $playerIds');
+      debugPrint('Payload: $title - $message');
       
       final response = await http.post(
         Uri.parse(apiUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'playerIds': playerIds,
+          'playerIds': playerIds, // These are intended to be External IDs (Firebase UIDs)
           'title': title ?? 'Orbit',
           'message': message,
           'data': data,
         }),
       );
       
+      debugPrint('API Status Code: ${response.statusCode}');
+      debugPrint('API Raw Body: ${response.body}');
+      
       if (response.statusCode == 200) {
-        debugPrint('Push notification logic triggered successfully');
         return 'Sent (${response.body})';
       } else {
-        debugPrint('Push notification API error (Status ${response.statusCode}): ${response.body}');
         return 'Error ${response.statusCode}: ${response.body}';
       }
     } catch (e) {
-      debugPrint('Error calling push API: $e');
+      debugPrint('PUSH API EXCEPTION: $e');
       return 'Exception: $e';
     }
   }
@@ -377,6 +401,7 @@ class NotificationService {
 
   /// Send notification with deduplication support
   /// If dedupeKey is provided, it will update existing notification instead of creating new one
+  /// Now uses doc ID for deduplication to avoid slow queries and missing indexes
   Future<String?> sendNotification({
     required String userId,
     required String message,
@@ -397,31 +422,18 @@ class NotificationService {
         if (relatedId != null) 'relatedId': relatedId,
       };
 
+      // Define doc reference - use dedupeKey if available to naturally overwrite/deduplicate
+      DocumentReference docRef;
       if (dedupeKey != null) {
-        // Check for existing notification with same dedupeKey
-        final existing = await _db
-            .collection('notifications')
-            .where('userId', isEqualTo: userId)
-            .where('dedupeKey', isEqualTo: dedupeKey)
-            .limit(1)
-            .get();
-
-        if (existing.docs.isNotEmpty) {
-          // Update existing notification
-          await existing.docs.first.reference.update({
-            'message': message,
-            'timestamp': FieldValue.serverTimestamp(),
-            'read': false,
-          });
-          debugPrint('Updated existing notification: $dedupeKey');
-          // Still trigger push for update
-          return await _sendPushToUser(userId, message, type.name);
-        }
+        // Use a composite ID to ensure uniqueness per user
+        final docId = '${userId}_$dedupeKey';
+        docRef = _db.collection('notifications').doc(docId);
+      } else {
+        docRef = _db.collection('notifications').doc();
       }
 
-      // Create new notification
-      await _db.collection('notifications').add(notificationData);
-      debugPrint('Created notification for $userId: $message');
+      await docRef.set(notificationData, SetOptions(merge: true));
+      debugPrint('Notification saved for $userId (ID: ${docRef.id})');
       
       // Send push notification via OneSignal
       return await _sendPushToUser(userId, message, type.name);
@@ -442,7 +454,7 @@ class NotificationService {
     );
   }
 
-  /// Send notifications to multiple users
+  /// Send notifications to multiple users efficiently
   Future<void> sendNotificationToMany({
     required List<String> userIds,
     required String message,
@@ -451,15 +463,50 @@ class NotificationService {
     String? groupId,
     String? relatedId,
   }) async {
-    for (final userId in userIds) {
-      await sendNotification(
-        userId: userId,
+    if (userIds.isEmpty) return;
+    
+    debugPrint('Sending batch notification to ${userIds.length} users');
+
+    try {
+      // 1. Create in-app notifications in Firestore using a batch
+      final batch = _db.batch();
+      final now = FieldValue.serverTimestamp();
+      
+      for (final userId in userIds) {
+        final dedupeKey = dedupeKeyPrefix != null ? '${dedupeKeyPrefix}_$userId' : null;
+        
+        // Use composite ID for natural deduplication in batch
+        DocumentReference docRef;
+        if (dedupeKey != null) {
+          docRef = _db.collection('notifications').doc('${userId}_$dedupeKey');
+        } else {
+          docRef = _db.collection('notifications').doc();
+        }
+        
+        batch.set(docRef, {
+          'userId': userId,
+          'message': message,
+          'timestamp': now,
+          'read': false,
+          'type': type.name,
+          if (dedupeKey != null) 'dedupeKey': dedupeKey,
+          if (groupId != null) 'groupId': groupId,
+          if (relatedId != null) 'relatedId': relatedId,
+        }, SetOptions(merge: true));
+      }
+      
+      await batch.commit();
+      debugPrint('Firestore batch notifications created');
+
+      // 2. Send push notifications in a single batch request
+      await _sendPushNotification(
+        playerIds: userIds,
         message: message,
-        type: type,
-        dedupeKey: dedupeKeyPrefix != null ? '${dedupeKeyPrefix}_$userId' : null,
-        groupId: groupId,
-        relatedId: relatedId,
+        data: {'type': type.name},
       );
+      debugPrint('Batch push notification triggered');
+    } catch (e) {
+      debugPrint('Error in batch notification: $e');
     }
   }
 
@@ -498,6 +545,71 @@ class NotificationService {
     );
   }
 
+  /// Send inheritance request notification to group owner/admins
+  Future<void> notifyInheritanceRequest({
+    required List<String> adminIds,
+    required String requesterId,
+    required String requesterName,
+    required String placeholderName,
+    required String groupId,
+  }) async {
+    final recipients = adminIds.where((id) => id != requesterId).toList();
+    await sendNotificationToMany(
+      userIds: recipients,
+      message: '$requesterName requested to inherit "$placeholderName"',
+      type: NotificationType.inheritanceRequest,
+      dedupeKeyPrefix: 'inherit_${groupId}_${requesterId}',
+      groupId: groupId,
+      relatedId: requesterId,
+    );
+  }
+
+  /// Send inheritance approval/rejection notification
+  Future<void> notifyInheritanceProcessed({
+    required String requesterId,
+    required String placeholderName,
+    required bool approved,
+    required String groupId,
+  }) async {
+    await sendNotification(
+      userId: requesterId,
+      message: approved
+          ? 'Request to inherit "$placeholderName" approved! Data transferred. 🎉'
+          : 'Request to inherit "$placeholderName" was declined.',
+      type: approved ? NotificationType.inheritanceApproved : NotificationType.inheritanceRejected,
+      groupId: groupId,
+    );
+  }
+
+  /// Send role change notification
+  Future<void> notifyRoleChange({
+    required String userId,
+    required String groupName,
+    required String roleAction, // "promoted to admin", "demoted from admin", "is now the owner of"
+    required String groupId,
+  }) async {
+    await sendNotification(
+      userId: userId,
+      message: 'You have been $roleAction $groupName',
+      type: NotificationType.roleChange,
+      groupId: groupId,
+    );
+  }
+
+  /// Send member removal notification
+  Future<void> notifyMemberRemoved({
+    required String userId,
+    required String groupName,
+    required String groupId,
+  }) async {
+    await sendNotification(
+      userId: userId,
+      message: 'You have been removed from $groupName',
+      type: NotificationType.removedFromGroup,
+      groupId: groupId,
+    );
+  }
+
   /// Send event created notification to group members
   Future<void> notifyEventCreated({
     required List<String> memberIds,
@@ -524,18 +636,41 @@ class NotificationService {
     required String eventId,
     required String eventTitle,
     required String groupId,
+    String? changeSummary,
   }) async {
     final recipients = memberIds.where((id) => id != editorId).toList();
+    
+    final baseMessage = 'Event updated: $eventTitle';
+    final fullMessage = changeSummary != null 
+        ? '$baseMessage\n$changeSummary' 
+        : baseMessage;
+
     for (final userId in recipients) {
       await sendNotification(
         userId: userId,
-        message: 'Event updated: $eventTitle',
+        message: fullMessage,
         type: NotificationType.eventUpdated,
         dedupeKey: 'event_$eventId',
         groupId: groupId,
         relatedId: eventId,
       );
     }
+  }
+
+  /// Send event deleted notification to group members
+  Future<void> notifyEventDeleted({
+    required List<String> memberIds,
+    required String deleterId,
+    required String eventTitle,
+    required String groupId,
+  }) async {
+    final recipients = memberIds.where((id) => id != deleterId).toList();
+    await sendNotificationToMany(
+      userIds: recipients,
+      message: 'Event cancelled: $eventTitle',
+      type: NotificationType.eventDeleted,
+      groupId: groupId,
+    );
   }
 
   /// Send RSVP notification to event creator
@@ -566,16 +701,61 @@ class NotificationService {
     final recipients = memberIds.where((id) => id != userId).toList();
     final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
     
-    for (final recipientId in recipients) {
-      await sendNotification(
-        userId: recipientId,
-        message: '$userName will be in $location on $dateStr',
-        type: NotificationType.locationChanged,
-        dedupeKey: 'location_${userId}_$dateStr',
-        groupId: groupId,
-        relatedId: userId,
-      );
-    }
+    await sendNotificationToMany(
+      userIds: recipients,
+      message: '$userName will be in $location on $dateStr',
+      type: NotificationType.locationChanged,
+      dedupeKeyPrefix: 'location_${userId}_$dateStr',
+      groupId: groupId,
+      relatedId: userId,
+    );
+  }
+
+  /// Send location range change notification
+  Future<void> notifyLocationRangeChanged({
+    required List<String> memberIds,
+    required String userId,
+    required String userName,
+    required String location,
+    required DateTime startDate,
+    required DateTime endDate,
+    required String groupId,
+  }) async {
+    final recipients = memberIds.where((id) => id != userId).toList();
+    final df = DateFormat('MMM d');
+    final rangeStr = '${df.format(startDate)} - ${df.format(endDate)}';
+    
+    await sendNotificationToMany(
+      userIds: recipients,
+      message: '$userName will be in $location ($rangeStr)',
+      type: NotificationType.locationChanged,
+      groupId: groupId,
+      relatedId: userId,
+    );
+  }
+
+  /// Send general location update notification (range or single)
+  Future<void> notifyLocationUpdate({
+    required List<String> memberIds,
+    required String updaterId,
+    required String updatedUserId,
+    required String groupId,
+    required String newLocation,
+    String? updatedUserName,
+  }) async {
+    final recipients = memberIds.where((id) => id != updaterId).toList();
+    
+    // If we don't have the name, just say "A member"
+    final name = updatedUserName ?? 'A member';
+    final message = '$name updated location to $newLocation';
+    
+    await sendNotificationToMany(
+      userIds: recipients,
+      message: message,
+      type: NotificationType.locationChanged,
+      groupId: groupId,
+      relatedId: updatedUserId,
+    );
   }
 
   /// Send birthday notification
@@ -594,16 +774,14 @@ class NotificationService {
         ? '🌙 $birthdayPersonName\'s lunar birthday is today!'
         : '🎂 $birthdayPersonName\'s birthday is today!';
     
-    for (final recipientId in recipients) {
-      await sendNotification(
-        userId: recipientId,
-        message: message,
-        type: NotificationType.birthdayToday,
-        dedupeKey: 'birthday_${birthdayPersonId}_$dateStr',
-        groupId: groupId,
-        relatedId: birthdayPersonId,
-      );
-    }
+    await sendNotificationToMany(
+      userIds: recipients,
+      message: message,
+      type: NotificationType.birthdayToday,
+      dedupeKeyPrefix: 'birthday_${birthdayPersonId}_$dateStr',
+      groupId: groupId,
+      relatedId: birthdayPersonId,
+    );
   }
 
   /// Send monthly birthday summary notification

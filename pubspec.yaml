@@ -39,7 +39,7 @@ dependencies:
   firebase_auth: ^6.1.2
   firebase_storage: ^13.0.4
   google_sign_in: ^6.2.1
-  shared_preferences: ^2.3.3
+  shared_preferences: ^2.5.4
   syncfusion_flutter_calendar: ^31.1.20
   syncfusion_flutter_datepicker: ^31.1.20
   http: ^1.6.0
