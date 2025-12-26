@@ -303,20 +303,21 @@ class _AddEventModalState extends State<AddEventModal> {
   }
 
   // Helper to calculate changes between two event versions
+  // Returns field names like "Title, Venue" (without "Updated" suffix)
   String? _generateChangeSummary(GroupEvent oldEvent, GroupEvent newEvent) {
     if (oldEvent == newEvent) return null;
     
     final changes = <String>[];
     
     if (oldEvent.title != newEvent.title) {
-      changes.add("Title Updated");
+      changes.add("Title");
     }
     
     if (oldEvent.venue != newEvent.venue) {
       final oldV = oldEvent.venue != null && oldEvent.venue!.isNotEmpty ? oldEvent.venue! : '';
       final newV = newEvent.venue != null && newEvent.venue!.isNotEmpty ? newEvent.venue! : '';
       if (oldV != newV) {
-        changes.add("Venue Updated");
+        changes.add("Venue");
       }
     }
     
@@ -325,7 +326,7 @@ class _AddEventModalState extends State<AddEventModal> {
     final newDateStr = DateFormat('yyyy-MM-dd').format(newEvent.date);
     
     if (oldDateStr != newDateStr) {
-       changes.add("Date Updated");
+       changes.add("Date");
     }
     
     // Compare times
@@ -335,15 +336,15 @@ class _AddEventModalState extends State<AddEventModal> {
            final oldTime = oldEvent.hasTime ? DateFormat('HH:mm').format(oldEvent.date) : '';
            final newTime = DateFormat('HH:mm').format(newEvent.date);
            if (oldTime != newTime) {
-             changes.add("Time Updated");
+             changes.add("Time");
            }
         } else {
-           changes.add("Time Removed");
+           changes.add("Time");
         }
     }
     
     if (oldEvent.description != newEvent.description) {
-      changes.add("Description Updated");
+      changes.add("Description");
     }
 
     if (changes.isEmpty) return null;

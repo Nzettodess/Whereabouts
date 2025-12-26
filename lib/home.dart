@@ -1054,6 +1054,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
               birthdays: dayBirthdays,
               currentUserId: _user!.uid,
               canWrite: _canWrite,
+              allUsers: _allUsers,
             ),
           );
         },
@@ -1395,6 +1396,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
                                   birthdays: birthdays,
                                   currentUserId: _user!.uid,
                                   canWrite: _canWrite,
+                                  allUsers: _allUsers,
                                 ),
                               );
                             },

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 import 'models.dart';
 import 'firestore_service.dart';
 import 'widgets/user_avatar.dart';
@@ -23,6 +24,36 @@ class RSVPManagementDialog extends StatefulWidget {
 class _RSVPManagementDialogState extends State<RSVPManagementDialog> {
   final FirestoreService _firestoreService = FirestoreService();
   EventFilter _currentFilter = EventFilter.upcoming;
+  Map<String, String> _userGroupRoles = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserRoles();
+  }
+
+  Future<void> _loadUserRoles() async {
+    try {
+      final groups = await _firestoreService.getUserGroups(widget.currentUserId).first;
+      final roles = <String, String>{};
+      for (var g in groups) {
+        if (g.ownerId == widget.currentUserId) {
+          roles[g.id] = 'owner';
+        } else if (g.admins.contains(widget.currentUserId)) {
+          roles[g.id] = 'admin';
+        } else {
+          roles[g.id] = 'member';
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _userGroupRoles = roles;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading user roles: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -168,6 +199,7 @@ class _RSVPManagementDialogState extends State<RSVPManagementDialog> {
                         event: event,
                         currentUserId: widget.currentUserId,
                         firestoreService: _firestoreService,
+                        userGroupRoles: _userGroupRoles,
                       );
                     },
                   );
@@ -204,12 +236,14 @@ class EventCard extends StatefulWidget {
   final GroupEvent event;
   final String currentUserId;
   final FirestoreService firestoreService;
+  final Map<String, String> userGroupRoles;
 
   const EventCard({
     super.key,
     required this.event,
     required this.currentUserId,
     required this.firestoreService,
+    required this.userGroupRoles,
   });
 
   @override
@@ -220,11 +254,74 @@ class _EventCardState extends State<EventCard> {
   bool _isExpanded = false;
   late Future<Map<String, dynamic>> _statsFuture;
   Future<Map<String, Map<String, dynamic>>>? _attendeesFuture;
+  
+  // Cooldown tracking for reminder button
+  String? _cooldownText;
+  bool _onCooldown = false;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _statsFuture = widget.firestoreService.getEventRSVPStats(widget.event, widget.event.groupId);
+    _checkReminderCooldown();
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) {
+        _checkReminderCooldown();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+  
+  Future<void> _checkReminderCooldown() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Check bypass flag first
+    final bypassEnabled = prefs.getBool('debug_bypass_reminder_limit') ?? false;
+    if (bypassEnabled) {
+      if (mounted) {
+        setState(() {
+          _onCooldown = false;
+          _cooldownText = null;
+        });
+      }
+      return;
+    }
+    
+    final lastReminderKey = 'last_reminder_${widget.event.id}';
+    final lastReminderMs = prefs.getInt(lastReminderKey) ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final oneDayMs = 24 * 60 * 60 * 1000;
+    
+    if (now - lastReminderMs < oneDayMs) {
+      final nextAllowed = DateTime.fromMillisecondsSinceEpoch(lastReminderMs + oneDayMs);
+      final timeLeft = nextAllowed.difference(DateTime.now());
+      final hoursLeft = timeLeft.inHours;
+      final minsLeft = timeLeft.inMinutes % 60;
+      if (mounted) {
+        setState(() {
+          _onCooldown = true;
+          _cooldownText = hoursLeft > 0 ? '${hoursLeft}h ${minsLeft}m' : '${minsLeft}m';
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _onCooldown = false;
+          _cooldownText = null;
+        });
+      }
+    }
   }
 
   void _toggleExpand() {
@@ -241,7 +338,10 @@ class _EventCardState extends State<EventCard> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isVeryNarrow = screenWidth < 390;
     final isNarrow = screenWidth < 450;
+    final role = widget.userGroupRoles[widget.event.groupId] ?? 'member';
     final isCreator = widget.event.creatorId == widget.currentUserId;
+    final isAdminOrOwner = role == 'owner' || role == 'admin';
+    final canManage = isCreator || isAdminOrOwner;
     final isPastEvent = widget.event.date.isBefore(DateTime.now());
 
     return FutureBuilder<Map<String, dynamic>>(
@@ -412,26 +512,34 @@ class _EventCardState extends State<EventCard> {
                         ],
                       ),
 
-                      // Action buttons for creator (always show, disable if no pending)
-                      if (isCreator && !isPastEvent) ...[
+                      // Action buttons for creator/owner/admin (always show, disable if no pending)
+                      if (canManage && !isPastEvent) ...[
                         SizedBox(height: isVeryNarrow ? 8 : 12),
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
-                            onPressed: noResponse > 0 
+                            // Disabled if: no pending responses OR on cooldown
+                            onPressed: (noResponse > 0 && !_onCooldown)
                                 ? () => _sendReminders(widget.event, stats['noResponseUserIds'])
-                                : null, // Disabled if no pending
-                            icon: Icon(Icons.notifications_active, size: isVeryNarrow ? 14 : 18),
+                                : null,
+                            icon: Icon(
+                              _onCooldown ? Icons.timer : Icons.notifications_active, 
+                              size: isVeryNarrow ? 14 : 18,
+                            ),
                             label: Text(
-                              noResponse > 0
-                                  ? (isVeryNarrow 
-                                      ? 'Remind $noResponse' 
-                                      : 'Send Reminder to $noResponse ${noResponse == 1 ? 'Person' : 'People'}')
-                                  : 'All Responded ✓',
+                              _onCooldown
+                                  ? 'Try again in $_cooldownText'
+                                  : noResponse > 0
+                                      ? (isVeryNarrow 
+                                          ? 'Remind $noResponse' 
+                                          : 'Send Reminder to $noResponse ${noResponse == 1 ? 'Person' : 'People'}')
+                                      : 'All Responded ✓',
                               style: TextStyle(fontSize: isVeryNarrow ? 11 : 14),
                             ),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: noResponse > 0 ? Colors.blue : Colors.green,
+                              foregroundColor: _onCooldown 
+                                  ? Colors.orange 
+                                  : noResponse > 0 ? Colors.blue : Colors.green,
                               padding: EdgeInsets.symmetric(vertical: isVeryNarrow ? 6 : 10),
                             ),
                           ),
@@ -607,14 +715,20 @@ class _EventCardState extends State<EventCard> {
       final now = DateTime.now().millisecondsSinceEpoch;
       final oneDayMs = 24 * 60 * 60 * 1000;
       
-      if (now - lastReminderMs < oneDayMs) {
+      // DEBUG: Set 'debug_bypass_reminder_limit' to true in SharedPreferences to bypass
+      final bypassLimit = prefs.getBool('debug_bypass_reminder_limit') ?? false;
+      
+      if (!bypassLimit && now - lastReminderMs < oneDayMs) {
         // Too soon - show when they can send next
         final nextAllowed = DateTime.fromMillisecondsSinceEpoch(lastReminderMs + oneDayMs);
-        final hoursLeft = nextAllowed.difference(DateTime.now()).inHours;
+        final timeLeft = nextAllowed.difference(DateTime.now());
+        final hoursLeft = timeLeft.inHours;
+        final minsLeft = timeLeft.inMinutes % 60;
+        final timeStr = hoursLeft > 0 ? '${hoursLeft}h ${minsLeft}m' : '${minsLeft}m';
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Reminder limit: Try again in ${hoursLeft}h'),
+              content: Text('Reminder limit: Try again in $timeStr'),
               backgroundColor: Colors.orange,
             ),
           );
@@ -630,12 +744,16 @@ class _EventCardState extends State<EventCard> {
       
       // Save timestamp
       await prefs.setInt(lastReminderKey, now);
+      
+      // Refresh cooldown state to update button
+      _checkReminderCooldown();
 
       if (mounted) {
+        final bypassText = bypassLimit ? ' [DEBUG: Bypass enabled]' : '';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Reminders sent to ${userIds.length} ${userIds.length == 1 ? 'person' : 'people'}'),
-            backgroundColor: Colors.green,
+            content: Text('Reminders sent to ${userIds.length} ${userIds.length == 1 ? 'person' : 'people'}$bypassText'),
+            backgroundColor: bypassLimit ? Colors.purple : Colors.green,
           ),
         );
       }

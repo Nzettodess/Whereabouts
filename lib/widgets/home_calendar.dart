@@ -798,6 +798,7 @@ class _HomeCalendarState extends State<HomeCalendar> {
                 birthdays: dayBirthdays,
                 currentUserId: widget.currentUserId,
                 canWrite: widget.canWrite,
+                allUsers: widget.allUsers,
               ),
             );
           }

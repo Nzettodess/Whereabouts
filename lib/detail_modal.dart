@@ -22,6 +22,7 @@ class DetailModal extends StatefulWidget {
   final List<Birthday> birthdays;
   final String currentUserId;
   final bool canWrite; // Whether write operations are allowed (false if session terminated)
+  final List<Map<String, dynamic>> allUsers; // Pre-loaded users from home to avoid re-fetching
 
   const DetailModal({
     super.key,
@@ -32,6 +33,7 @@ class DetailModal extends StatefulWidget {
     required this.birthdays,
     required this.currentUserId,
     this.canWrite = true, // Default to true for backwards compatibility
+    this.allUsers = const [], // Default empty for backwards compatibility
   });
 
   @override
@@ -40,11 +42,19 @@ class DetailModal extends StatefulWidget {
 
 class _DetailModalState extends State<DetailModal> {
   final FirestoreService _firestoreService = FirestoreService();
-  Map<String, Map<String, dynamic>> _userDetails = {};
+  
+  // Static cache for member names (persists across modal openings until app reload)
+  static Map<String, Map<String, dynamic>> _userDetailsCache = {};
+  
   Map<String, String> _groupNames = {}; // Map groupId -> groupName
   List<String> _pinnedMembers = [];
   Set<String> _manageableMembers = {}; // Members the current user can edit (as admin/owner)
   Set<String> _adminGroups = {}; // Groups where current user is owner or admin
+  
+  // Static method to clear cache (call on logout or explicit refresh)
+  static void clearUserCache() {
+    _userDetailsCache.clear();
+  }
 
   // Session-based expansion state memory PER DATE (static to persist across modal reopens)
   // Key: "yyyy-MM-dd", Value: expansion state (default true if not set)
@@ -64,11 +74,25 @@ class _DetailModalState extends State<DetailModal> {
   @override
   void initState() {
     super.initState();
-    _loadUserDetails();
+    
+    // Pre-populate cache from allUsers (already loaded in home page)
+    _populateCacheFromAllUsers();
+    
+    _loadUserDetails(); // Load any missing users (e.g., placeholders)
     _loadPinnedMembers();
 
     _loadGroupNames();
     _loadManageableMembers();
+  }
+  
+  /// Pre-populate cache from widget.allUsers to avoid re-fetching
+  void _populateCacheFromAllUsers() {
+    for (final user in widget.allUsers) {
+      final uid = user['uid'] as String?;
+      if (uid != null && !_userDetailsCache.containsKey(uid)) {
+        _userDetailsCache[uid] = user;
+      }
+    }
   }
   
   /// Check if writes are allowed, show dialog if not
@@ -225,37 +249,42 @@ class _DetailModalState extends State<DetailModal> {
 
   Future<void> _loadUserDetails() async {
     final userIds = widget.locations.map((l) => l.userId).toSet();
+    bool needsUpdate = false;
+    
     for (final uid in userIds) {
-      if (!_userDetails.containsKey(uid)) {
+      if (!_userDetailsCache.containsKey(uid)) {
         // Check if this is a placeholder member
         if (uid.startsWith('placeholder_')) {
           final doc = await FirebaseFirestore.instance.collection('placeholder_members').doc(uid).get();
           if (doc.exists) {
             final data = doc.data() as Map<String, dynamic>;
-            setState(() {
-              _userDetails[uid] = {
-                'displayName': data['displayName'] ?? 'Placeholder',
-                'photoURL': null,
-                'isPlaceholder': true,
-                'groupId': data['groupId'],
-                'defaultLocation': data['defaultLocation'],
-                'birthday': data['birthday'],
-                'hasLunarBirthday': data['hasLunarBirthday'] ?? false,
-                'lunarBirthdayMonth': data['lunarBirthdayMonth'],
-                'lunarBirthdayDay': data['lunarBirthdayDay'],
-              };
-            });
+            _userDetailsCache[uid] = {
+              'displayName': data['displayName'] ?? 'Placeholder',
+              'photoURL': null,
+              'isPlaceholder': true,
+              'groupId': data['groupId'],
+              'defaultLocation': data['defaultLocation'],
+              'birthday': data['birthday'],
+              'hasLunarBirthday': data['hasLunarBirthday'] ?? false,
+              'lunarBirthdayMonth': data['lunarBirthdayMonth'],
+              'lunarBirthdayDay': data['lunarBirthdayDay'],
+            };
+            needsUpdate = true;
           }
         } else {
           // Regular user
           final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
           if (doc.exists) {
-            setState(() {
-              _userDetails[uid] = doc.data() as Map<String, dynamic>;
-            });
+            _userDetailsCache[uid] = doc.data() as Map<String, dynamic>;
+            needsUpdate = true;
           }
         }
       }
+    }
+    
+    // Only rebuild if we actually loaded new data
+    if (needsUpdate && mounted) {
+      setState(() {});
     }
   }
 
@@ -338,7 +367,7 @@ class _DetailModalState extends State<DetailModal> {
 
   Future<void> _editPlaceholderLocation(UserLocation element) async {
     if (!_checkCanWrite()) return;
-    final userData = _userDetails[element.userId] ?? {};
+    final userData = _userDetailsCache[element.userId] ?? {};
     final placeholderName = userData['displayName'] ?? 'Placeholder';
     
     // Show location picker for date-specific editing - uses the standard "Set Location" UI
@@ -755,7 +784,7 @@ class _DetailModalState extends State<DetailModal> {
                     ),
                   ),
                   itemBuilder: (context, element) {
-                    final user = _userDetails[element.userId];
+                    final user = _userDetailsCache[element.userId];
                     final name = user?['displayName'] ?? user?['email'] ?? "Unknown User";
                     final photoUrl = user?['photoURL'];
                     final isPinned = _pinnedMembers.contains(element.userId);
@@ -931,7 +960,7 @@ class _DetailModalState extends State<DetailModal> {
                                   onPressed: () async {
                                     if (!_checkCanWrite()) return;
                                     final targetUserId = element.userId;
-                                    final targetName = _userDetails[targetUserId]?['displayName'] ?? 'this member';
+                                    final targetName = _userDetailsCache[targetUserId]?['displayName'] ?? 'this member';
                                     
                                     // Check if target user has a default location
                                     final userDoc = await FirebaseFirestore.instance

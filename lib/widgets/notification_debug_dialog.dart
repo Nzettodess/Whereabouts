@@ -20,6 +20,7 @@ class _NotificationDebugDialogState extends State<NotificationDebugDialog> {
   String? _status;
   bool _isLoading = false;
   List<String> _auditResults = [];
+  bool _rsvpBypassEnabled = false;
 
   @override
   void initState() {
@@ -28,6 +29,23 @@ class _NotificationDebugDialogState extends State<NotificationDebugDialog> {
     if (user != null) {
       _targetUidController.text = user.uid;
     }
+    _loadBypassState();
+  }
+  
+  Future<void> _loadBypassState() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _rsvpBypassEnabled = prefs.getBool('debug_bypass_reminder_limit') ?? false;
+    });
+  }
+  
+  Future<void> _toggleRsvpBypass(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('debug_bypass_reminder_limit', value);
+    setState(() {
+      _rsvpBypassEnabled = value;
+    });
+    _updateStatus(value ? 'RSVP bypass ENABLED' : 'RSVP bypass DISABLED');
   }
 
   @override
@@ -264,6 +282,26 @@ class _NotificationDebugDialogState extends State<NotificationDebugDialog> {
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Column(
         children: [
+          // RSVP Bypass Toggle
+          SwitchListTile(
+            title: const Text('RSVP Reminder Bypass'),
+            subtitle: Text(
+              _rsvpBypassEnabled 
+                  ? '⚠️ 24h limit DISABLED - can send unlimited reminders' 
+                  : '24h limit active',
+              style: TextStyle(
+                color: _rsvpBypassEnabled ? Colors.orange : Colors.grey,
+              ),
+            ),
+            secondary: Icon(
+              _rsvpBypassEnabled ? Icons.timer_off : Icons.timer,
+              color: _rsvpBypassEnabled ? Colors.orange : Colors.grey,
+            ),
+            value: _rsvpBypassEnabled,
+            onChanged: _toggleRsvpBypass,
+            activeColor: Colors.orange,
+          ),
+          const Divider(),
           _buildSettingRow(
             'Cleanup All Test Data',
             'Removes all notifications and objects starting with "test_"',
