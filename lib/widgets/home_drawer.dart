@@ -4,6 +4,7 @@ import 'credits_feedback_dialog.dart';
 
 class HomeDrawer extends StatelessWidget {
   final User? user;
+  final String? displayName;
   final String? photoUrl;
   final VoidCallback onProfileTap;
   final VoidCallback onManageGroupsTap;
@@ -15,6 +16,7 @@ class HomeDrawer extends StatelessWidget {
   const HomeDrawer({
     super.key,
     required this.user,
+    this.displayName,
     required this.photoUrl,
     required this.onProfileTap,
     required this.onManageGroupsTap,
@@ -50,13 +52,13 @@ class HomeDrawer extends StatelessWidget {
                           backgroundColor: Colors.white,
                           child: ClipOval(
                             child: Image.network(
-                              user?.photoURL ?? photoUrl ?? "https://ui-avatars.com/api/?name=${Uri.encodeComponent(user?.displayName ?? 'User')}",
+                              photoUrl ?? user?.photoURL ?? "https://ui-avatars.com/api/?name=${Uri.encodeComponent(displayName ?? user?.displayName ?? 'User')}",
                               width: 60,
                               height: 60,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) {
                                 return Image.network(
-                                  "https://ui-avatars.com/api/?name=${Uri.encodeComponent(user?.displayName ?? 'User')}",
+                                  "https://ui-avatars.com/api/?name=${Uri.encodeComponent(displayName ?? user?.displayName ?? 'User')}",
                                   width: 60,
                                   height: 60,
                                   fit: BoxFit.cover,
@@ -68,7 +70,7 @@ class HomeDrawer extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        user?.displayName ?? user?.email ?? "User",
+                        displayName ?? user?.displayName ?? user?.email ?? "User",
                         style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ],

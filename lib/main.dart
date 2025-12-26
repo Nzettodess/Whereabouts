@@ -27,16 +27,29 @@ void main() async {
   
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Enable Firebase App Check for API Security
-  await FirebaseAppCheck.instance.activate(
-    webProvider: ReCaptchaV3Provider('6LecyDcsAAAAAH1E16_m85mrrAodiAdM9nWWfGRu'),
-  );
+  // Enable Firebase App Check for API Security with Resilience
+  try {
+    await FirebaseAppCheck.instance.activate(
+      webProvider: ReCaptchaV3Provider('6LecyDcsAAAAAH1E16_m85mrrAodiAdM9nWWfGRu'),
+    );
+    debugPrint("Firebase App Check initialized successfully");
+  } catch (e) {
+    debugPrint("Warning: Firebase App Check failed to initialize (possibly blocked): $e");
+  }
 
   // Enable Firebase Performance Monitoring
-  FirebasePerformance.instance.setPerformanceCollectionEnabled(true);
+  try {
+    FirebasePerformance.instance.setPerformanceCollectionEnabled(true);
+  } catch (e) {
+    debugPrint("Warning: Firebase Performance Monitoring failed to initialize: $e");
+  }
 
   // Enable Firebase Analytics
-  await analytics.setAnalyticsCollectionEnabled(true);
+  try {
+    await analytics.setAnalyticsCollectionEnabled(true);
+  } catch (e) {
+    debugPrint("Warning: Firebase Analytics failed to initialize: $e");
+  }
 
   // Enable offline persistence with 15MB cache for PWA support
   FirebaseFirestore.instance.settings = const Settings(

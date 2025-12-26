@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -23,6 +24,7 @@ class _ProfileDialogState extends State<ProfileDialog> {
   final FirestoreService _firestoreService = FirestoreService();
   final TextEditingController _nameController = TextEditingController();
   String? _photoUrl;
+  StreamSubscription? _profileSubscription;
 
   @override
   void initState() {
@@ -32,6 +34,28 @@ class _ProfileDialogState extends State<ProfileDialog> {
       _nameController.text = cached['displayName'] ?? '';
       _photoUrl = cached['photoURL'];
     }
+
+    _profileSubscription = _firestoreService.getUserProfileStream(widget.user.uid).listen((data) {
+      if (!mounted) return;
+      // Update controller only if it was empty (initial load from stream)
+      // First check Firestore, then fall back to Google Auth
+      if (_nameController.text.isEmpty) {
+        final name = data['displayName'] ?? widget.user.displayName ?? '';
+        if (name.isNotEmpty) {
+          _nameController.text = name;
+        }
+      }
+      setState(() {
+         _photoUrl = data['photoURL'] ?? widget.user.photoURL;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _profileSubscription?.cancel();
+    _nameController.dispose();
+    super.dispose();
   }
 
   @override
@@ -57,8 +81,19 @@ class _ProfileDialogState extends State<ProfileDialog> {
               return const SkeletonProfile();
             }
 
-            final data = snapshot.data;
-            final photoUrl = data?['photoURL'];
+            final data = snapshot.data ?? {};
+            // Prioritize Firestore, fall back to Auth
+            final photoUrl = data['photoURL'] ?? widget.user.photoURL;
+            final displayName = data['displayName']?.isNotEmpty == true ? data['displayName'] : widget.user.displayName;
+
+            // Update controller if not yet populated
+            if (_nameController.text.isEmpty && displayName != null && displayName.isNotEmpty) {
+               WidgetsBinding.instance.addPostFrameCallback((_) {
+                 if (mounted && _nameController.text.isEmpty) {
+                   _nameController.text = displayName;
+                 }
+               });
+            }
 
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -78,7 +113,8 @@ class _ProfileDialogState extends State<ProfileDialog> {
                 ClipOval(
                   child: Builder(
                     builder: (context) {
-                      final name = data?['displayName'] ?? widget.user.email ?? 'User';
+                      // Use displayName we already computed with fallbacks
+                      final name = displayName ?? widget.user.email ?? 'User';
                       final imageUrl = (photoUrl != null && photoUrl.isNotEmpty) 
                         ? photoUrl 
                         : "https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&size=160";
@@ -104,7 +140,7 @@ class _ProfileDialogState extends State<ProfileDialog> {
                           print('[Profile Avatar] Failed URL: $url');
                           // Fallback to ui-avatars.com
                           return Image.network(
-                            "https://ui-avatars.com/api/?name=${Uri.encodeComponent(data?['displayName'] ?? widget.user.email ?? 'User')}&size=160",
+                            "https://ui-avatars.com/api/?name=${Uri.encodeComponent(displayName ?? widget.user.email ?? 'User')}&size=160",
                             width: 80,
                             height: 80,
                             fit: BoxFit.cover,
@@ -424,8 +460,8 @@ class _ProfileDialogState extends State<ProfileDialog> {
                     
                     if (confirm == true) {
                       await FirebaseAuth.instance.signOut();
-                      // Clear Firestore cache to prevent stale data access
-                      await FirebaseFirestore.instance.clearPersistence();
+                      // Note: clearPersistence removed - it requires app restart and causes grey screen
+                      // The FirestoreService singleton caches are cleared by the auth state listener
                       if (mounted) {
                         // Close profile dialog and return to login screen
                         // The auth state listener in home.dart will handle showing login

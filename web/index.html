@@ -51,16 +51,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
 
-  <!-- Preload Noto Color Emoji for lantern 🏮 and other emojis -->
-  <link rel="preload"
-    href="https://fonts.gstatic.com/s/notocoloremoji/v30/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFab5s79iz64w.woff2" as="font"
-    type="font/woff2" crossorigin>
-
   <!-- Skeleton Loading Styles - shown while fonts load -->
   <style>
-    /* Hide content until fonts are loaded */
+    /* Skeleton Loading Styles - shown while fonts load */
     .fonts-loading body {
-      visibility: hidden;
+      visibility: visible;
     }
 
     /* PWA Keyboard/Viewport Fix: Force height to fill dynamic viewport */
@@ -196,20 +191,7 @@
   <!-- OneSignal SDK Loader -->
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 
-  <!-- SW Interceptor: Force usage of onesignal_flutter_sw.js (MERGED Strategy) -->
-  <!-- Placed in HEAD to guarantee it runs before flutter_bootstrap.js -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      const originalRegister = navigator.serviceWorker.register;
-      navigator.serviceWorker.register = function (scriptURL, options) {
-        if (scriptURL.toString().indexOf('flutter_service_worker') > -1) {
-          console.warn('Redirecting Flutter SW registration to onesignal_flutter_sw.js');
-          return originalRegister.call(navigator.serviceWorker, 'onesignal_flutter_sw.js', options);
-        }
-        return originalRegister.call(navigator.serviceWorker, scriptURL, options);
-      };
-    }
-  </script>
+  <!-- SW Interceptor removed to prevent Flutter bootstrap timeouts -->
 </head>
 
 <body>
@@ -557,8 +539,29 @@
     // Expose function to get player ID for Flutter
     window.getOneSignalPlayerId = async function () {
       try {
-        console.log('[OneSignal] getOneSignalPlayerId invoked. Waiting for SDK queue...');
-        await new Promise(resolve => window.OneSignalDeferred.push(() => resolve()));
+        console.log('[OneSignal] getOneSignalPlayerId invoked.');
+
+        // Check if OneSignal SDK was loaded (might be blocked by ad blocker)
+        if (typeof OneSignal === 'undefined' || !window.OneSignal) {
+          console.warn('[OneSignal] SDK not loaded (possibly blocked). Returning null.');
+          return null;
+        }
+
+        // Wait for SDK with timeout (5 seconds max)
+        const sdkReady = await Promise.race([
+          new Promise(resolve => window.OneSignalDeferred.push(() => resolve(true))),
+          new Promise(resolve => setTimeout(() => resolve(false), 5000))
+        ]);
+
+        if (!sdkReady) {
+          console.warn('[OneSignal] SDK ready timeout. Returning null.');
+          return null;
+        }
+
+        if (!OneSignal.User || !OneSignal.User.PushSubscription) {
+          console.warn('[OneSignal] User or PushSubscription not available.');
+          return null;
+        }
 
         const subscription = OneSignal.User.PushSubscription;
         console.log('[OneSignal] SDK Ready. Current Subscription State:', {
@@ -598,8 +601,22 @@
     // Expose function to request permission
     window.requestPushPermission = async function () {
       try {
-        // Wait for OneSignal to be ready
-        await new Promise(resolve => window.OneSignalDeferred.push(() => resolve()));
+        // Check if OneSignal SDK was loaded (might be blocked by ad blocker)
+        if (typeof OneSignal === 'undefined' || !window.OneSignal) {
+          console.warn('[OneSignal] SDK not loaded for permission request. Returning null.');
+          return null;
+        }
+
+        // Wait for OneSignal to be ready with timeout
+        const sdkReady = await Promise.race([
+          new Promise(resolve => window.OneSignalDeferred.push(() => resolve(true))),
+          new Promise(resolve => setTimeout(() => resolve(false), 5000))
+        ]);
+
+        if (!sdkReady) {
+          console.warn('[OneSignal] SDK ready timeout for permission. Returning null.');
+          return null;
+        }
 
         console.log('Requesting OneSignal notification permission...');
         const currentPermission = window.getNotificationPermission();

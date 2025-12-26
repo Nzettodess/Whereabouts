@@ -41,6 +41,7 @@ class HomeWithLogin extends StatefulWidget {
 class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserver {
   User? _user = FirebaseAuth.instance.currentUser;
   String? _photoUrl;
+  String? _displayName;
   double _previousKeyboardHeight = 0;
   final FirestoreService _firestoreService = FirestoreService();
   final GoogleCalendarService _googleCalendarService = GoogleCalendarService();
@@ -67,6 +68,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
   StreamSubscription? _placeholderMembersSubscription;
   StreamSubscription? _eventsSubscription;
   StreamSubscription? _settingsSubscription;
+  StreamSubscription? _profileSubscription;
   StreamSubscription<bool>? _connectivitySubscription;
   
   // Session service for multi-device detection
@@ -91,15 +93,17 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
     
     // Listen to auth state changes (login/logout)
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      setState(() {
-        _user = user;
-      });
+      if (mounted) {
+        setState(() {
+          _user = user;
+        });
+      }
       
       if (user != null) {
         // User logged in - end any previous session first (for account switching)
         _endSessionTracking();
         
-        _loadUserProfile();
+        _loadUserProfile(); // Sets up real-time sync
         _loadData();
         _startSessionTracking(user.uid);
         // Initialize FCM for push notifications
@@ -110,13 +114,16 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
         // User logged out - clear data and cancel subscriptions
         _endSessionTracking();
         _cancelAllSubscriptions();
-        setState(() {
-          _photoUrl = null;
-          _locations = [];
-          _events = [];
-          _holidays = [];
-          _allUsers = [];
-        });
+        if (mounted) {
+          setState(() {
+            _photoUrl = null;
+            _displayName = null;
+            _locations = [];
+            _events = [];
+            _holidays = [];
+            _allUsers = [];
+          });
+        }
       }
     });
   }
@@ -477,6 +484,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
     _placeholderMembersSubscription?.cancel();
     _eventsSubscription?.cancel();
     _settingsSubscription?.cancel();
+    _profileSubscription?.cancel();
   }
   
   void _cancelDataSubscriptions() {
@@ -490,18 +498,28 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
   void _handleLoginSuccess() async {
     // Auth state listener will handle the update
     // Just reload data manually for immediate update
-    await _loadUserProfile();
+    _loadUserProfile();
     _loadData();
   }
 
-  Future<void> _loadUserProfile() async {
+  void _loadUserProfile() {
     if (_user == null) return;
-    final doc = await FirebaseFirestore.instance.collection("users").doc(_user!.uid).get();
-    if (doc.exists) {
-      setState(() {
-        _photoUrl = doc.data()?['photoURL'];
-      });
+    
+    // Cache-First: yield last seen profile immediately if available
+    final cached = _firestoreService.getLastSeenProfile(_user!.uid);
+    if (cached != null) {
+      _photoUrl = cached['photoURL'];
+      _displayName = cached['displayName'];
     }
+
+    _profileSubscription?.cancel();
+    _profileSubscription = _firestoreService.getUserProfileStream(_user!.uid).listen((data) {
+      if (!mounted) return;
+      setState(() {
+        _photoUrl = data['photoURL'];
+        _displayName = data['displayName'];
+      });
+    });
   }
 
   /// Check and send birthday notifications (day-of and monthly summary)
@@ -1246,7 +1264,15 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
 
   @override
   Widget build(BuildContext context) {
-    final loggedIn = _user != null;
+    if (_user == null) {
+      return Scaffold(
+        body: Stack(
+          children: [
+            LoginOverlay(onSignedIn: _handleLoginSuccess),
+          ],
+        ),
+      );
+    }
 
     return GestureDetector(
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
@@ -1280,136 +1306,135 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
           ),
         ),
         actions: [
-          if (loggedIn) ...[
-            IconButton(
-              icon: const Icon(Icons.event_note, color: Colors.deepPurple),
-              tooltip: 'Upcoming',
-              onPressed: _openUpcomingSummary,
-            ),
-            IconButton(
-              icon: const Icon(Icons.cake, color: Colors.pink),
-              tooltip: 'Birthday Baby',
-              onPressed: _openBirthdayBabyDialog,
-            ),
+          IconButton(
+            icon: const Icon(Icons.event_note, color: Colors.deepPurple),
+            tooltip: 'Upcoming',
+            onPressed: _openUpcomingSummary,
+          ),
+          IconButton(
+            icon: const Icon(Icons.cake, color: Colors.pink),
+            tooltip: 'Birthday Baby',
+            onPressed: _openBirthdayBabyDialog,
+          ),
 
-            // Notification bell with unread badge
-            StreamBuilder<int>(
-              stream: NotificationService().getUnreadCount(_user!.uid),
-              builder: (context, snapshot) {
-                final unreadCount = snapshot.data ?? 0;
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.notifications, color: Colors.orange),
-                      tooltip: 'Notifications',
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (dialogContext) => NotificationCenter(
-                            currentUserId: _user!.uid,
-                            canWrite: _canWrite,
-                            onNavigateToDate: (date) {
-                              // Close the notification dialog first (already handled in NotificationCenter)
-                              // Open detail modal for the specified date
-                              final normalizedDate = DateTime(date.year, date.month, date.day);
-                              final locations = _getLocationsForDate(normalizedDate);
-                              final events = _getEventsForDate(normalizedDate);
-                              final holidays = _getHolidaysForDate(normalizedDate);
-                              final birthdays = _getBirthdaysForDate(normalizedDate);
-                              
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                                ),
-                                builder: (sheetContext) => DetailModal(
-                                  date: normalizedDate,
-                                  locations: locations,
-                                  events: events,
-                                  holidays: holidays,
-                                  birthdays: birthdays,
-                                  currentUserId: _user!.uid,
-                                  canWrite: _canWrite,
-                                  allUsers: _allUsers,
-                                ),
-                              );
-                            },
-                          ),
-                        );
-                      },
-                    ),
-                    if (unreadCount > 0)
-                      Positioned(
-                        right: 4,
-                        top: 4,
-                        child: IgnorePointer(
-                          child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 1.5),
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 18,
-                            minHeight: 18,
-                          ),
-                          child: Text(
-                            unreadCount > 9 ? '9+' : unreadCount.toString(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
+          // Notification bell with unread badge
+          StreamBuilder<int>(
+            stream: NotificationService().getUnreadCount(_user!.uid),
+            builder: (context, snapshot) {
+              final unreadCount = snapshot.data ?? 0;
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications, color: Colors.orange),
+                    tooltip: 'Notifications',
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (dialogContext) => NotificationCenter(
+                          currentUserId: _user!.uid,
+                          canWrite: _canWrite,
+                          onNavigateToDate: (date) {
+                            // Close the notification dialog first (already handled in NotificationCenter)
+                            // Open detail modal for the specified date
+                            final normalizedDate = DateTime(date.year, date.month, date.day);
+                            final locations = _getLocationsForDate(normalizedDate);
+                            final events = _getEventsForDate(normalizedDate);
+                            final holidays = _getHolidaysForDate(normalizedDate);
+                            final birthdays = _getBirthdaysForDate(normalizedDate);
+                            
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                              ),
+                              builder: (sheetContext) => DetailModal(
+                                date: normalizedDate,
+                                locations: locations,
+                                events: events,
+                                holidays: holidays,
+                                birthdays: birthdays,
+                                currentUserId: _user!.uid,
+                                canWrite: _canWrite,
+                                allUsers: _allUsers,
+                              ),
+                            );
+                          },
                         ),
+                      );
+                    },
+                  ),
+                  if (unreadCount > 0)
+                    Positioned(
+                      right: 4,
+                      top: 4,
+                      child: IgnorePointer(
+                        child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 18,
+                          minHeight: 18,
+                        ),
+                        child: Text(
+                          unreadCount > 9 ? '9+' : unreadCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ),
-                  ],
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0, left: 8.0),
+            child: GestureDetector(
+              onTap: () {
+                if (!_checkCanWrite()) return;
+                showDialog(
+                  context: context,
+                  builder: (_) => ProfileDialog(user: _user!),
                 );
               },
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 16.0, left: 8.0),
-              child: GestureDetector(
-                onTap: () {
-                  if (!_checkCanWrite()) return;
-                  showDialog(
-                    context: context,
-                    builder: (_) => ProfileDialog(user: _user!),
-                  );
-                },
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundColor: Colors.grey[200],
-                  child: ClipOval(
-                    child: Image.network(
-                      _user?.photoURL ?? _photoUrl ?? "https://ui-avatars.com/api/?name=${Uri.encodeComponent(_user?.displayName ?? 'User')}",
-                      width: 36,
-                      height: 36,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Image.network(
-                          "https://ui-avatars.com/api/?name=${Uri.encodeComponent(_user?.displayName ?? 'User')}",
-                          width: 36,
-                          height: 36,
-                          fit: BoxFit.cover,
-                        );
-                      },
-                    ),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.grey[200],
+                child: ClipOval(
+                  child: Image.network(
+                    _photoUrl ?? _user?.photoURL ?? "https://ui-avatars.com/api/?name=${Uri.encodeComponent(_displayName ?? _user?.displayName ?? 'User')}",
+                    width: 36,
+                    height: 36,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Image.network(
+                        "https://ui-avatars.com/api/?name=${Uri.encodeComponent(_displayName ?? _user?.displayName ?? 'User')}",
+                        width: 36,
+                        height: 36,
+                        fit: BoxFit.cover,
+                      );
+                    },
                   ),
                 ),
               ),
             ),
-          ]
+          ),
         ],
       ),
-      drawer: loggedIn
-          ? HomeDrawer(
+      drawer: HomeDrawer(
               user: _user,
+              displayName: _displayName,
               photoUrl: _photoUrl,
               onProfileTap: () {
                 if (!_checkCanWrite()) return;
@@ -1450,8 +1475,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
                   });
                 }
               },
-            )
-          : null,
+            ),
       body: Stack(
         children: [
           // Persistent offline banner
@@ -1519,7 +1543,6 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
             ),
             child: Column(
             children: [
-                if (loggedIn)
                   _DelayedEmptyStateWidget(
                     stream: _firestoreService.getUserGroups(_user!.uid),
                     delayMs: 800, // Wait 800ms before showing empty state
@@ -1636,20 +1659,11 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
               ],
             ),
           ),
-          if (!loggedIn) ...[
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                child: Container(color: Colors.black.withOpacity(0.2)),
-              ),
-            ),
-            LoginOverlay(onSignedIn: _handleLoginSuccess),
-          ],
         ],
       ),
-      floatingActionButton: loggedIn ? _buildSpeedDial() : null,
-    ),  // Close Scaffold (child of GestureDetector)
-    );  // Close GestureDetector
+      floatingActionButton: _buildSpeedDial(),
+    ),
+    );
   }
 
   Widget _buildSpeedDial() {

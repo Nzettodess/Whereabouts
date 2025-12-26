@@ -929,10 +929,8 @@ class FirestoreService {
 
     await for (final snapshot in _db.collection('users').doc(userId).snapshots()) {
       final data = snapshot.data();
-      if (data != null) {
-        _lastProfileCache[userId] = data;
-        yield data;
-      }
+      _lastProfileCache[userId] = data ?? {};
+      yield _lastProfileCache[userId]!;
     }
   }
 
