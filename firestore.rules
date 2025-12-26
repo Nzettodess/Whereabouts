@@ -249,29 +249,15 @@ service cloud.firestore {
     // 8. NOTIFICATIONS COLLECTION
     // ============================================
     match /notifications/{notificationId} {
-      // User can only read their own notifications
-      allow read: if isAuthenticated() && 
-                     resource.data.userId == userId();
+      // User can read their own notifications
+      allow read: if isAuthenticated() && resource.data.userId == userId();
       
-      // Any authenticated user can create notifications
-      // Validate required fields and allow optional fields
-      allow create: if isAuthenticated() &&
-                       request.resource.data.keys().hasAll(['userId', 'message', 'timestamp', 'read']) &&
-                       request.resource.data.keys().hasOnly(['userId', 'message', 'timestamp', 'read', 'type', 'dedupeKey', 'groupId', 'relatedId']) &&
-                       request.resource.data.userId is string &&
-                       request.resource.data.message is string &&
-                       request.resource.data.message.size() <= 500 &&
-                       request.resource.data.read == false;
-      
-      // User can only update their own (mark as read)
-      // Only allow changing the 'read' field
-      allow update: if isAuthenticated() && 
-                       resource.data.userId == userId() &&
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      // Any authenticated user can create or update notifications
+      // (needed for deduplication when using set with merge:true)
+      allow create, update: if isAuthenticated();
       
       // User can only delete their own
-      allow delete: if isAuthenticated() && 
-                       resource.data.userId == userId();
+      allow delete: if isAuthenticated() && resource.data.userId == userId();
     }
     
     // ============================================
@@ -318,19 +304,5 @@ service cloud.firestore {
       allow update, delete: if false;
     }
     
-    // ============================================
-    // 10. NOTIFICATIONS COLLECTION (Top-level)
-    // ============================================
-    match /notifications/{notificationId} {
-      // User can read their own notifications (userId field matches)
-      allow read: if isAuthenticated() && resource.data.userId == userId();
-      
-      // Any authenticated user can create or update notifications
-      // (needed for batch.set with merge:true for deduplication)
-      allow create, update: if isAuthenticated();
-      
-      // User can delete their own notifications
-      allow delete: if isAuthenticated() && resource.data.userId == userId();
-    }
   }
 }

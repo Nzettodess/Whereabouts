@@ -6,6 +6,7 @@ import 'models.dart';
 import 'firestore_service.dart';
 import 'widgets/user_avatar.dart';
 import 'widgets/skeleton_loading.dart';
+import 'services/notification_service.dart';
 
 enum EventFilter { all, upcoming, past }
 
@@ -736,10 +737,12 @@ class _EventCardState extends State<EventCard> {
         return;
       }
       
-      await widget.firestoreService.sendRSVPReminder(
-        event.id,
-        event.title,
-        userIds,
+      await NotificationService().notifyRSVPReminder(
+        memberIds: userIds,
+        senderId: widget.currentUserId,
+        eventId: event.id,
+        eventTitle: event.title,
+        groupId: event.groupId,
       );
       
       // Save timestamp

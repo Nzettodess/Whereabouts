@@ -7,6 +7,7 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'package:web/web.dart' as web;
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 import '../models.dart';
 
 /// Service for managing push notifications (FCM) and in-app notifications
@@ -16,6 +17,7 @@ class NotificationService {
   NotificationService._internal();
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final Uuid _uuid = const Uuid();
 
   String? get oneSignalPlayerId => _oneSignalPlayerId;
 
@@ -429,7 +431,10 @@ class NotificationService {
         final docId = '${userId}_$dedupeKey';
         docRef = _db.collection('notifications').doc(docId);
       } else {
-        docRef = _db.collection('notifications').doc();
+        // Generate a unique ID using timestamp to guarantee this is seen as a new notification
+        // even if message and relatedId are identical (e.g. separate RSVP reminders)
+        final uniqueKey = '${userId}_${DateTime.now().millisecondsSinceEpoch}_${_uuid.v4().substring(0, 8)}';
+        docRef = _db.collection('notifications').doc(uniqueKey);
       }
 
       await docRef.set(notificationData, SetOptions(merge: true));
@@ -459,6 +464,7 @@ class NotificationService {
     required List<String> userIds,
     required String message,
     required NotificationType type,
+    String? title,
     String? dedupeKeyPrefix,
     String? groupId,
     String? relatedId,
@@ -480,7 +486,9 @@ class NotificationService {
         if (dedupeKey != null) {
           docRef = _db.collection('notifications').doc('${userId}_$dedupeKey');
         } else {
-          docRef = _db.collection('notifications').doc();
+          // Force uniqueness with timestamp and random suffix to prevent any "overwriting"
+          final uniqueKey = '${userId}_${DateTime.now().millisecondsSinceEpoch}_${_uuid.v4().substring(0, 8)}';
+          docRef = _db.collection('notifications').doc(uniqueKey);
         }
         
         batch.set(docRef, {
@@ -502,6 +510,7 @@ class NotificationService {
       await _sendPushNotification(
         playerIds: userIds,
         message: message,
+        title: title,
         data: {'type': type.name},
       );
       debugPrint('Batch push notification triggered');
@@ -633,6 +642,7 @@ class NotificationService {
       userIds: recipients,
       message: 'New event in $groupName: $eventTitle',
       type: NotificationType.eventCreated,
+      title: eventTitle,
       groupId: groupId,
       relatedId: eventId,
     );
@@ -653,21 +663,19 @@ class NotificationService {
     
     debugPrint('[EventUpdate] changeSummary: $changeSummary');
     
-    final baseMessage = 'Event updated: $eventTitle';
-    final fullMessage = changeSummary != null && changeSummary.isNotEmpty
-        ? '$baseMessage\n$changeSummary' 
-        : baseMessage;
+    // Format: "EventName: change1, change2 updated" or "EventName: updated"
+    final message = (changeSummary != null && changeSummary.isNotEmpty)
+        ? '$eventTitle: $changeSummary updated'
+        : '$eventTitle: updated';
     
-    debugPrint('[EventUpdate] fullMessage: $fullMessage');
+    debugPrint('[EventUpdate] message: $message');
 
-    // Use timestamp-based dedupeKey to prevent stacking (each update is separate)
-    final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-    
+    // Use separate notifications for each update (timestamped IDs used internally)
     await sendNotificationToMany(
       userIds: recipients,
-      message: fullMessage,
+      message: message,
       type: NotificationType.eventUpdated,
-      dedupeKeyPrefix: 'event_${eventId}_$timestamp',
+      title: eventTitle,
       groupId: groupId,
       relatedId: eventId,
     );
@@ -685,6 +693,7 @@ class NotificationService {
       userIds: recipients,
       message: 'Event cancelled: $eventTitle',
       type: NotificationType.eventDeleted,
+      title: eventTitle,
       groupId: groupId,
     );
   }
@@ -701,6 +710,27 @@ class NotificationService {
       userId: creatorId,
       message: '$responderName RSVP\'d "$status" to $eventTitle',
       type: NotificationType.rsvpReceived,
+      relatedId: eventId,
+    );
+  }
+
+  /// Send RSVP reminder to multiple group members
+  Future<void> notifyRSVPReminder({
+    required List<String> memberIds,
+    required String senderId,
+    required String eventId,
+    required String eventTitle,
+    required String groupId,
+  }) async {
+    final recipients = memberIds.where((id) => id != senderId).toList();
+    if (recipients.isEmpty) return;
+
+    await sendNotificationToMany(
+      userIds: recipients,
+      message: 'Reminder: Please RSVP for "$eventTitle"',
+      type: NotificationType.eventUpdated,
+      title: eventTitle,
+      groupId: groupId,
       relatedId: eventId,
     );
   }
