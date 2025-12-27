@@ -454,7 +454,7 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
         bgColor = isDark ? Colors.pink.withOpacity(0.2) : Colors.pink.shade50;
         break;
       case UpcomingItemType.lunarBirthday:
-        icon = Icons.auto_awesome; // Lantern-like sparkle for lunar birthday
+        icon = Icons.cake; // Fallback, but emoji is used instead
         iconColor = isDark ? Colors.amber.shade300 : Colors.amber.shade700;
         bgColor = isDark ? Colors.amber.withOpacity(0.2) : Colors.amber.shade50;
         break;
@@ -497,7 +497,11 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
                           color: bgColor,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(icon, color: iconColor, size: isVeryNarrow ? 14 : (isNarrow ? 16 : 20)),
+                        child: Center(
+                          child: item.type == UpcomingItemType.lunarBirthday
+                              ? Text('🏮', style: TextStyle(fontSize: isVeryNarrow ? 14 : (isNarrow ? 16 : 20)))
+                              : Icon(icon, color: iconColor, size: isVeryNarrow ? 14 : (isNarrow ? 16 : 20)),
+                        ),
                       ),
                       SizedBox(width: isVeryNarrow ? 6 : (isNarrow ? 8 : 12)),
                       Expanded(
@@ -762,10 +766,16 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
       final groupId = user['groupId'] as String? ?? '';
       final groupName = widget.groupNames[groupId] ?? 'Group';
 
-      // Solar birthday
+      // Solar birthday - check current year and next year
       final solarBirthday = Birthday.getSolarBirthday(user, now.year);
       if (solarBirthday != null && isUpcoming(solarBirthday.occurrenceDate)) {
         items.add(UpcomingItem.fromBirthday(solarBirthday, groupId, groupName));
+      } else {
+        // Check next year's occurrence for dates already passed this year
+        final nextYearBirthday = Birthday.getSolarBirthday(user, now.year + 1);
+        if (nextYearBirthday != null && isUpcoming(nextYearBirthday.occurrenceDate)) {
+          items.add(UpcomingItem.fromBirthday(nextYearBirthday, groupId, groupName));
+        }
       }
 
       // Lunar birthday - check each day in range
@@ -783,11 +793,17 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
       final groupId = placeholder.groupId;
       final groupName = widget.groupNames[groupId] ?? 'Group';
 
-      // Solar birthday (if set)
+      // Solar birthday (if set) - check current year and next year
       if (placeholder.birthday != null) {
         final solarBirthday = Birthday.fromPlaceholderMember(placeholder, now.year);
         if (solarBirthday != null && isUpcoming(solarBirthday.occurrenceDate)) {
           items.add(UpcomingItem.fromBirthday(solarBirthday, groupId, groupName));
+        } else {
+          // Check next year's occurrence for dates already passed this year
+          final nextYearBirthday = Birthday.fromPlaceholderMember(placeholder, now.year + 1);
+          if (nextYearBirthday != null && isUpcoming(nextYearBirthday.occurrenceDate)) {
+            items.add(UpcomingItem.fromBirthday(nextYearBirthday, groupId, groupName));
+          }
         }
       }
 

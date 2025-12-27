@@ -105,7 +105,6 @@ class UpcomingItem {
     String groupName,
   ) {
     final ageStr = birthday.age > 0 && !birthday.isLunar ? ' (${birthday.age})' : '';
-    final prefix = birthday.isLunar ? '🌙 ' : '';
     
     return UpcomingItem(
       type: birthday.isLunar ? UpcomingItemType.lunarBirthday : UpcomingItemType.birthday,
@@ -114,7 +113,7 @@ class UpcomingItem {
       userId: birthday.userId,
       userName: birthday.displayName,
       date: birthday.occurrenceDate,
-      title: "$prefix${birthday.displayName}'s Birthday$ageStr",
+      title: "${birthday.displayName}'s Birthday$ageStr",
       subtitle: groupName,
       birthday: birthday,
     );
@@ -130,7 +129,7 @@ class UpcomingItem {
       case UpcomingItemType.birthday:
         return '🎂';
       case UpcomingItemType.lunarBirthday:
-        return '🌙';
+        return '🏮';
       case UpcomingItemType.holiday:
         return '🎌';
     }

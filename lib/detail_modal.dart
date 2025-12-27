@@ -530,10 +530,13 @@ class _DetailModalState extends State<DetailModal> {
               children: widget.birthdays.map((b) => ListTile(
                 contentPadding: const EdgeInsets.only(left: 16.0, right: 2.0),
                 visualDensity: VisualDensity.compact,
-                leading: Icon(
-                  b.isLunar ? Icons.nights_stay : Icons.cake, 
-                  color: b.isLunar ? Colors.orange : Colors.green,
-                ),
+                leading: b.isLunar 
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: Center(child: Text('🏮', style: TextStyle(fontSize: 20))),
+                      )
+                    : const Icon(Icons.cake, color: Colors.green),
                 title: Text(b.isLunar ? "${b.displayName} [lunar birthday]" : b.displayName),
                 subtitle: b.isLunar ? null : Text("Turning ${b.age} years old"),
               )).toList(),
