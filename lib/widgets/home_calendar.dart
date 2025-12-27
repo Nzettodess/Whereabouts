@@ -402,12 +402,31 @@ class _HomeCalendarState extends State<HomeCalendar> {
   }
 
   /// Get responsive sizes based on constraints
-  /// Mobile (<500): smaller fonts, tighter spacing, hide lunar month
-  /// Tablet (500-800): medium sizing
-  /// Desktop (>800): original sizing
+  /// <= 430: max 2 avatars (tight mobile)
+  /// <= 500: max 4 avatars (mobile)
+  /// <= 768: max 5 avatars (tablet)
+  /// <= 1024: max 6 avatars (small laptop)
+  /// < 1920: max 10 avatars (desktop)
+  /// >= 1920: max 12 avatars (large desktop)
   _ResponsiveSizes _getResponsiveSizes(double width) {
-    if (width < 500) {
-      // Mobile - compact sizing, hide lunar month text
+    if (width <= 430) {
+      // Tight mobile - very compact, max 2 avatars
+      return _ResponsiveSizes(
+        cardMargin: 6.0,
+        dayFontSize: 11.0,
+        religiousFontSize: 6.0,
+        barFontSize: 6.0,
+        moreFontSize: 5.5,
+        avatarSize: 14.0,
+        avatarSizeMedium: 12.0,
+        avatarSizeSmall: 10.0,
+        cellPadding: 0.4,
+        maxAvatars: 2,
+        showLunarMonth: false,
+        maxBars: 4,
+      );
+    } else if (width <= 500) {
+      // Mobile - compact sizing
       return _ResponsiveSizes(
         cardMargin: 8.0,
         dayFontSize: 12.0,
@@ -418,12 +437,12 @@ class _HomeCalendarState extends State<HomeCalendar> {
         avatarSizeMedium: 13.0,
         avatarSizeSmall: 11.0,
         cellPadding: 0.5,
-        maxAvatars: 3,
+        maxAvatars: 4,
         showLunarMonth: false,
         maxBars: 5,
       );
-    } else if (width < 800) {
-      // Tablet (500-800px) - medium sizing
+    } else if (width <= 769) {
+      // Tablet (500-768px) - max 5 avatars
       return _ResponsiveSizes(
         cardMargin: 12.0,
         dayFontSize: 13.0,
@@ -434,12 +453,44 @@ class _HomeCalendarState extends State<HomeCalendar> {
         avatarSizeMedium: 14.0,
         avatarSizeSmall: 12.0,
         cellPadding: 0.75,
-        maxAvatars: 6,
+        maxAvatars: 4,
         showLunarMonth: true,
         maxBars: 2,
       );
-    } else {
-      // Desktop - original sizing
+    } else if (width <= 1025) {
+      // Small laptop (768-1024px) - max 6 avatars
+      return _ResponsiveSizes(
+        cardMargin: 14.0,
+        dayFontSize: 13.0,
+        religiousFontSize: 8.5,
+        barFontSize: 7.0,
+        moreFontSize: 6.5,
+        avatarSize: 18.0,
+        avatarSizeMedium: 14.0,
+        avatarSizeSmall: 12.0,
+        cellPadding: 0.8,
+        maxAvatars: 6,
+        showLunarMonth: true,
+        maxBars: 3,
+      );
+    } else if (width <= 1280) {
+      // Medium desktop (1025-1280px) - max 7 avatars
+      return _ResponsiveSizes(
+        cardMargin: 18.0,
+        dayFontSize: 14.0,
+        religiousFontSize: 9.0,
+        barFontSize: 7.5,
+        moreFontSize: 7.0,
+        avatarSize: 19.0,
+        avatarSizeMedium: 15.0,
+        avatarSizeSmall: 13.0,
+        cellPadding: 0.9,
+        maxAvatars: 7,
+        showLunarMonth: true,
+        maxBars: 3,
+      );
+    } else if (width < 1920) {
+      // Desktop (1280-1920px)
       return _ResponsiveSizes(
         cardMargin: 20.0,
         dayFontSize: 14.0,
@@ -450,9 +501,25 @@ class _HomeCalendarState extends State<HomeCalendar> {
         avatarSizeMedium: 15.0,
         avatarSizeSmall: 13.0,
         cellPadding: 1.0,
-        maxAvatars: 8,
+        maxAvatars: 10,
         showLunarMonth: true,
         maxBars: 3,
+      );
+    } else {
+      // Large desktop (>=1920px)
+      return _ResponsiveSizes(
+        cardMargin: 24.0,
+        dayFontSize: 15.0,
+        religiousFontSize: 10.0,
+        barFontSize: 8.0,
+        moreFontSize: 7.5,
+        avatarSize: 22.0,
+        avatarSizeMedium: 17.0,
+        avatarSizeSmall: 14.0,
+        cellPadding: 1.2,
+        maxAvatars: 12,
+        showLunarMonth: true,
+        maxBars: 4,
       );
     }
   }

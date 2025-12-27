@@ -1490,6 +1490,59 @@ class FirestoreService {
       
       await batch.commit();
     }
+
+    // Notify group members of placeholder location change
+    _notifyPlaceholderLocationRangeChange(
+      placeholderMemberId,
+      groupId,
+      startDate,
+      endDate,
+      nation,
+      state,
+    );
+  }
+
+  /// Helper to notify groups of placeholder location range change
+  Future<void> _notifyPlaceholderLocationRangeChange(
+    String placeholderMemberId,
+    String groupId,
+    DateTime start,
+    DateTime end,
+    String nation,
+    String? state,
+  ) async {
+    try {
+      // Fetch placeholder member's display name
+      final phDoc = await _db.collection('placeholder_members').doc(placeholderMemberId).get();
+      final placeholderName = phDoc.data()?['displayName'] ?? 'A placeholder member';
+
+      // Fetch the group to get its members
+      final groupDoc = await _db.collection('groups').doc(groupId).get();
+      if (!groupDoc.exists) return;
+      final group = Group.fromFirestore(groupDoc);
+
+      // Construct full location string
+      final locationStr = (state != null && state.isNotEmpty) ? '$state, $nation' : nation;
+
+      // Collect all unique recipients (excluding the placeholder itself, though it can't receive)
+      final allMemberIds = group.members.toSet();
+      // Placeholders can't receive notifications, so no need to remove them
+
+      if (allMemberIds.isEmpty) return;
+
+      // Send notification
+      await NotificationService().notifyLocationRangeChanged(
+        memberIds: allMemberIds.toList(),
+        userId: placeholderMemberId,
+        userName: placeholderName,
+        location: locationStr,
+        startDate: start,
+        endDate: end,
+        groupId: groupId,
+      );
+    } catch (e, stackTrace) {
+      _log.error('Error notifying placeholder location range change', e, stackTrace);
+    }
   }
 
   /// Get placeholder member locations for a specific date
