@@ -169,6 +169,30 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
   void _leaveGroup(Group group) async {
     if (_user == null) return;
     
+    // Check if user is owner and there are other members
+    if (group.ownerId == _user!.uid && group.members.length > 1) {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text("Owner Cannot Leave"),
+            content: const Text(
+              "You are the owner of this group.\n\n"
+              "You must transfer ownership to another member before you can leave.\n\n"
+              "Go to the Members list to transfer ownership.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("OK"),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
     // Check if user is the last member
     final isLastMember = group.members.length == 1;
     

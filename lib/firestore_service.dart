@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'models.dart';
@@ -99,8 +101,31 @@ class FirestoreService {
     final requestId = 'join_${_uuid.v4()}';
     
     // Get requester name for notification AND storage
+    // Robust name retrieval: Firestore -> Auth -> Fallback
+    String userName = 'Someone';
+    
+    // 1. Try Firestore Profile
     final userDoc = await _db.collection('users').doc(userId).get();
-    final userName = userDoc.data()?['displayName'] ?? userDoc.data()?['email'] ?? 'Someone';
+    if (userDoc.exists && userDoc.data() != null) {
+       final data = userDoc.data()!;
+       if (data['displayName'] != null && data['displayName'].toString().isNotEmpty) {
+         userName = data['displayName'];
+       } else if (data['email'] != null && data['email'].toString().isNotEmpty) {
+         userName = data['email'];
+       }
+    }
+    
+    // 2. Fallback to Auth (if Firestore name is missing/generic)
+    if (userName == 'Someone' || userName.isEmpty) {
+      final authUser = FirebaseAuth.instance.currentUser;
+      if (authUser != null && authUser.uid == userId) {
+         if (authUser.displayName != null && authUser.displayName!.isNotEmpty) {
+            userName = authUser.displayName!;
+         } else if (authUser.email != null && authUser.email!.isNotEmpty) {
+            userName = authUser.email!;
+         }
+      }
+    }
     
     await _db.collection('join_requests').doc(requestId).set({
       'groupId': groupId,
@@ -243,7 +268,13 @@ class FirestoreService {
       return _groupsStreamCache[userId]!;
     }
 
-    final stream = _getUserGroupsInternal(userId).asBroadcastStream();
+    late Stream<List<Group>> stream;
+    stream = _getUserGroupsInternal(userId).asBroadcastStream(
+      onCancel: (subscription) {
+        subscription.cancel();
+        _groupsStreamCache.remove(userId);
+      },
+    );
     _groupsStreamCache[userId] = stream;
     return stream;
   }
@@ -729,7 +760,13 @@ class FirestoreService {
       return _eventsStreamCache[userId]!;
     }
 
-    final stream = _getAllUserEventsInternal(userId).asBroadcastStream();
+    late Stream<List<GroupEvent>> stream;
+    stream = _getAllUserEventsInternal(userId).asBroadcastStream(
+      onCancel: (subscription) {
+        subscription.cancel();
+        _eventsStreamCache.remove(userId);
+      },
+    );
     _eventsStreamCache[userId] = stream;
     return stream;
   }
@@ -913,7 +950,13 @@ class FirestoreService {
       return _profileStreamCache[userId]!;
     }
 
-    final stream = _getUserProfileInternal(userId).asBroadcastStream();
+    late Stream<Map<String, dynamic>> stream;
+    stream = _getUserProfileInternal(userId).asBroadcastStream(
+      onCancel: (subscription) {
+        subscription.cancel();
+        _profileStreamCache.remove(userId);
+      },
+    );
     _profileStreamCache[userId] = stream;
     return stream;
   }
@@ -942,51 +985,68 @@ class FirestoreService {
   /// Get users by their IDs (for group members only)
   /// This replaces the broken getAllUsersStream which violated security rules
   /// by trying to read ALL users instead of just group members
-  Stream<List<Map<String, dynamic>>> getUsersByIdsStream(List<String> userIds) async* {
+  Stream<List<Map<String, dynamic>>> getUsersByIdsStream(List<String> userIds) {
     if (userIds.isEmpty) {
-      yield [];
-      return;
+      return Stream.value([]);
     }
 
     final cacheKey = 'users_${userIds.hashCode}';
-    if (_lastUsersCache.containsKey(cacheKey)) {
-      yield _lastUsersCache[cacheKey]!;
-    }
-
-    // Firestore 'whereIn' has a limit of 10 items per query
-    // For larger lists, we need to batch the queries
-    const batchSize = 10;
-    final allUsers = <Map<String, dynamic>>[];
     
-    for (var i = 0; i < userIds.length; i += batchSize) {
-      final batch = userIds.skip(i).take(batchSize).toList();
-      
-      try {
-        await for (final snapshot in _db
-            .collection('users')
-            .where(FieldPath.documentId, whereIn: batch)
-            .snapshots()) {
-          
-          // Merge batch results into allUsers
-          for (final doc in snapshot.docs) {
-            final data = doc.data();
-            data['uid'] = doc.id; // Ensure uid is set
-            final existingIndex = allUsers.indexWhere((u) => u['uid'] == doc.id);
-            if (existingIndex >= 0) {
-              allUsers[existingIndex] = data;
-            } else {
-              allUsers.add(data);
-            }
-          }
-          
-          _lastUsersCache[cacheKey] = List.from(allUsers);
-          yield _lastUsersCache[cacheKey]!;
-        }
-      } catch (e) {
-        print('[FirestoreService] Error fetching users batch: $e');
-        // Continue with next batch on error
+    late StreamController<List<Map<String, dynamic>>> controller;
+    List<StreamSubscription> subscriptions = [];
+    
+    // Store current results for each batch to combine them
+    final Map<int, List<Map<String, dynamic>>> batchResults = {};
+    const batchSize = 10;
+    
+    void emitCombined() {
+      final allUsers = batchResults.values.expand((x) => x).toList();
+      _lastUsersCache[cacheKey] = allUsers;
+      if (!controller.isClosed) {
+        controller.add(allUsers);
       }
     }
+
+    controller = StreamController<List<Map<String, dynamic>>>(
+      onListen: () {
+        // Emit cached value immediately if available
+        if (_lastUsersCache.containsKey(cacheKey)) {
+             controller.add(_lastUsersCache[cacheKey]!);
+        }
+
+        // Start subscriptions for each batch concurrently
+        for (var i = 0; i < userIds.length; i += batchSize) {
+           final batchIndex = i ~/ batchSize;
+           final batch = userIds.skip(i).take(batchSize).toList();
+           
+           // Initialize empty result for this batch
+           batchResults[batchIndex] = [];
+           
+           final sub = _db.collection('users')
+             .where(FieldPath.documentId, whereIn: batch)
+             .snapshots()
+             .listen((snapshot) {
+                final users = snapshot.docs.map((doc) {
+                   final data = doc.data();
+                   data['uid'] = doc.id;
+                   return data;
+                }).toList();
+                
+                batchResults[batchIndex] = users;
+                emitCombined();
+             }, onError: (e) {
+                print('[FirestoreService] Error fetching batch $batchIndex: $e');
+             });
+             
+           subscriptions.add(sub);
+        }
+      },
+      onCancel: () {
+        for (final sub in subscriptions) sub.cancel();
+      }
+    );
+    
+    return controller.stream;
   }
 
   /// @deprecated Use getUsersByIdsStream instead - this violates security rules
@@ -1040,7 +1100,13 @@ class FirestoreService {
       return _globalLocationsStreamCache[cacheKey]!;
     }
 
-    final stream = _getAllUserLocationsInternal().asBroadcastStream();
+    late Stream<List<UserLocation>> stream;
+    stream = _getAllUserLocationsInternal().asBroadcastStream(
+       onCancel: (subscription) {
+        subscription.cancel();
+        _globalLocationsStreamCache.remove(cacheKey);
+      },
+    );
     _globalLocationsStreamCache[cacheKey] = stream;
     return stream;
   }
@@ -1078,7 +1144,13 @@ class FirestoreService {
       return _placeholderMembersStreamCache[userId]!;
     }
 
-    final stream = _getPlaceholderMembersInternal(userId, groupIds).asBroadcastStream();
+    late Stream<List<PlaceholderMember>> stream;
+    stream = _getPlaceholderMembersInternal(userId, groupIds).asBroadcastStream(
+      onCancel: (subscription) {
+        subscription.cancel();
+        _placeholderMembersStreamCache.remove(userId);
+      },
+    );
     _placeholderMembersStreamCache[userId] = stream;
     return stream;
   }
@@ -1123,7 +1195,13 @@ class FirestoreService {
       return _placeholderLocationsStreamCache[userId]!;
     }
 
-    final stream = _getPlaceholderLocationsInternal(userId, groupIds).asBroadcastStream();
+    late Stream<List<UserLocation>> stream;
+    stream = _getPlaceholderLocationsInternal(userId, groupIds).asBroadcastStream(
+      onCancel: (subscription) {
+        subscription.cancel();
+        _placeholderLocationsStreamCache.remove(userId);
+      },
+    );
     _placeholderLocationsStreamCache[userId] = stream;
     return stream;
   }

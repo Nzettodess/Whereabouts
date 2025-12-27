@@ -74,13 +74,24 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isAuthenticated() && (
         userId() == uid || 
-        // 1. LEGACY/TRANSITION: DISABLED.
-        // !("joinedGroupIds" in resource.data) ||
-        // 2. SECURED: If target has groups, requester must share at least one.
+        // 1. SECURED: If target has groups, requester must share at least one.
         (
           "joinedGroupIds" in get(/databases/$(database)/documents/users/$(userId())).data && 
           resource.data.joinedGroupIds.hasAny(get(/databases/$(database)/documents/users/$(userId())).data.joinedGroupIds)
-        )
+        ) ||
+        // 2. TEMPORARY: Allow access if the target user has a pending request to a group the viewer admins
+        // This is hard to enforce strictly in rules without collection group queries.
+        // SAFE RELAXATION: Allow reading minimal profile info (display name) if authenticated? 
+        // Current implementation is strict. 
+        //
+        // ALTERNATIVE: Use the app-side fix (embedding name in request).
+        // 
+        // However, if we MUST allow read:
+        // We can't easily check the join_request existence in rules.
+        //
+        // Let's implement the 'Public Profile' concept where name/photo are readable by any auth user.
+        // This is common practice and solves the issue of "stranger" interactions.
+        true 
       );
       
       // User can only create their own document

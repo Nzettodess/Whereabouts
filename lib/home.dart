@@ -963,7 +963,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
     final cacheService = HolidayCacheService(_user!.uid);
     debugPrint('[Home] Fetching holidays for ${calendarIds.length} calendars: $calendarIds');
     final holidays = await cacheService.getHolidays(calendarIds);
-    debugPrint('[Home] Fetched ${holidays.length} Public Holiday (PH) total for $calendarIds');
+    // debugPrint('[Home] Fetched ${holidays.length} Public Holiday (PH) total for $calendarIds');
     
     if (mounted) {
       setState(() {

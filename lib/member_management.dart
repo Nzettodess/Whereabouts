@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -27,23 +28,38 @@ class _MemberManagementState extends State<MemberManagement> {
   final FirestoreService _firestoreService = FirestoreService();
   Map<String, Map<String, dynamic>> _memberDetails = {};
   late Group _group;
+  StreamSubscription<List<Map<String, dynamic>>>? _usersSubscription;
 
   @override
   void initState() {
     super.initState();
     _group = widget.group;
-    _loadMemberDetails();
+    _subscribeToMembers();
   }
 
-  Future<void> _loadMemberDetails() async {
-    for (final memberId in _group.members) {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(memberId).get();
-      if (doc.exists) {
+  @override
+  void dispose() {
+    _usersSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _subscribeToMembers() {
+    _usersSubscription?.cancel();
+    if (_group.members.isEmpty) return;
+
+    // Use batched stream for efficient loading
+    _usersSubscription = _firestoreService.getUsersByIdsStream(_group.members).listen((usersData) {
+      if (mounted) {
         setState(() {
-          _memberDetails[memberId] = doc.data() as Map<String, dynamic>;
+          for (final user in usersData) {
+            final uid = user['uid'] as String?;
+            if (uid != null) {
+              _memberDetails[uid] = user;
+            }
+          }
         });
       }
-    }
+    });
   }
 
   Future<void> _refreshGroup() async {
@@ -52,6 +68,8 @@ class _MemberManagementState extends State<MemberManagement> {
       setState(() {
         _group = Group.fromFirestore(doc);
       });
+      // Re-subscribe to fetch new members if any
+      _subscribeToMembers();
     }
   }
 
@@ -248,7 +266,7 @@ class _MemberManagementState extends State<MemberManagement> {
         memberDetails: _memberDetails[memberId] ?? {},
         groupId: _group.id,
         onSaved: () {
-          _loadMemberDetails();
+          // Stream updates automatically
         },
       ),
     );
@@ -441,9 +459,37 @@ class _MemberManagementState extends State<MemberManagement> {
   }
 
   Widget _buildJoinRequestTile(JoinRequest request) {
-    // Legacy support: if name is 'Unknown User' (default for old records) but we have permission to read,
-    // we could try to fetch. But for now, we rely on the embedded name or 'Unknown'.
-    // If we closed the leak, fetching would likely fail anyway for non-members.
+    // If name is generic 'Someone' or 'Unknown User', try to fetch the real name
+    // (This requires read permission on the user profile, which public profiles allow)
+    Widget buildName(String cachedName) {
+      if (cachedName != 'Someone' && cachedName != 'Unknown User') {
+        return Text(
+          cachedName,
+          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+          overflow: TextOverflow.ellipsis,
+        );
+      }
+
+      return FutureBuilder<DocumentSnapshot>(
+        future: FirebaseFirestore.instance.collection('users').doc(request.requesterId).get(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
+            final data = snapshot.data!.data() as Map<String, dynamic>;
+            final name = data['displayName'] ?? data['email'] ?? 'Someone';
+            return Text(
+              name,
+              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            );
+          }
+          return Text(
+            cachedName,
+            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+            overflow: TextOverflow.ellipsis,
+          );
+        },
+      );
+    }
     
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -459,11 +505,7 @@ class _MemberManagementState extends State<MemberManagement> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  request.requesterName,
-                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                buildName(request.requesterName),
                 Text(
                   'Requested ${DateFormat('MMM d').format(request.createdAt)}',
                   style: TextStyle(fontSize: 10, color: Theme.of(context).hintColor),
@@ -530,7 +572,7 @@ class _MemberManagementState extends State<MemberManagement> {
         
         if (approve) {
           await _refreshGroup();
-          await _loadMemberDetails();
+
         }
         
         if (mounted) {

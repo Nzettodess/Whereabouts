@@ -93,7 +93,7 @@ class _HomeCalendarState extends State<HomeCalendar> {
     }
 
     if (needsRefresh) {
-      debugPrint('[HomeCalendar] Refresh triggered by: $reason');
+      // debugPrint('[HomeCalendar] Refresh triggered by: $reason');
       forceRefresh();
     }
   }
@@ -175,10 +175,10 @@ class _HomeCalendarState extends State<HomeCalendar> {
     
     _preloadedMonths.add(monthKey);
     
-    debugPrint('[HomeCalendar] Precompute done for $monthKey. Cache sizes: '
-      'Holidays: ${_cachedHolidays.length}, '
-      'Religious: ${_cachedReligiousDates.length}, '
-      'Events: ${_cachedEvents.length}');
+    // debugPrint('[HomeCalendar] Precompute done for $monthKey. Cache sizes: '
+    //   'Holidays: ${_cachedHolidays.length}, '
+    //   'Religious: ${_cachedReligiousDates.length}, '
+    //   'Events: ${_cachedEvents.length}');
 
     // PRELOAD ADJACENT MONTHS (async, after current month is displayed)
     // This makes swipe transitions seamless!
