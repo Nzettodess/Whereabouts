@@ -47,6 +47,8 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
   final GoogleCalendarService _googleCalendarService = GoogleCalendarService();
   
   List<UserLocation> _locations = [];
+  List<UserLocation> _realUserLocations = [];
+  List<UserLocation> _placeholderUserLocations = [];
   List<GroupEvent> _events = [];
   List<Holiday> _holidays = [];
   List<String> _religiousCalendars = []; // Enabled religious calendars
@@ -114,6 +116,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
         // User logged out - clear data and cancel subscriptions
         _endSessionTracking();
         _cancelAllSubscriptions();
+        _firestoreService.clearAllCaches();
         if (mounted) {
           setState(() {
             _photoUrl = null;
@@ -695,6 +698,27 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
     }
   }
 
+  void _updateCombinedLocations() {
+    if (!mounted) return;
+    
+    final all = [..._realUserLocations, ..._placeholderUserLocations];
+    
+    // Deduplicate: If a user has multiple entries for the same day (due to multiple shared groups),
+    // we only keep one to avoid calendar clutter.
+    final Map<String, UserLocation> deduped = {};
+    for (final loc in all) {
+      final dateStr = "${loc.date.year}-${loc.date.month.toString().padLeft(2, '0')}-${loc.date.day.toString().padLeft(2, '0')}";
+      final key = "${loc.userId}_$dateStr";
+      if (!deduped.containsKey(key)) {
+        deduped[key] = loc;
+      }
+    }
+
+    setState(() {
+      _locations = deduped.values.toList();
+    });
+  }
+
   void _loadData() {
     if (_user == null) return;
     
@@ -716,23 +740,19 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
     _groupsSubscription = _firestoreService.getUserGroups(userId).listen((userGroups) {
       if (!mounted) return;
       
-      // Update groups and re-setup data listeners if group list changed
-      final oldGroupIds = _myGroups.map((g) => g.id).toSet();
-      final newGroupIds = userGroups.map((g) => g.id).toSet();
+      // Calculate member signatures to detect content changes (not just list changes)
+      // This ensures that if someone joins/leaves a group, our data filters update.
+      final oldSignature = _myGroups.map((g) => '${g.id}:${g.members.join(',')}').join('|');
+      final newSignature = userGroups.map((g) => '${g.id}:${g.members.join(',')}').join('|');
       
       setState(() {
         _myGroups = userGroups;
       });
 
-      // If group IDs changed, we must restart data subscriptions to get correct filtering
-      if (oldGroupIds.length != newGroupIds.length || !oldGroupIds.containsAll(newGroupIds)) {
-        print('[Home] Groups changed, resetting data listeners');
-        _setupDataListeners(userId, newGroupIds.toList());
-      } else {
-        // Just ensure listeners are running if they weren't
-        if (_eventsSubscription == null) {
-          _setupDataListeners(userId, newGroupIds.toList());
-        }
+      // Restart listeners if group list OR member composition changed
+      if (oldSignature != newSignature || _eventsSubscription == null) {
+        print('[Home] Groups or members changed, resetting data listeners');
+        _setupDataListeners(userId, userGroups.map((g) => g.id).toList());
       }
     });
   }
@@ -778,7 +798,7 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
     }
 
     // Own Locations
-    final cachedLocs = _firestoreService.getLastSeenAllLocations();
+    final cachedLocs = _firestoreService.getLastSeenAllLocations(userId);
     if (cachedLocs != null) {
       // Logic from _setupDataListeners for merging
       final myGroupMemberIds = <String>{};
@@ -818,28 +838,23 @@ class _HomeWithLoginState extends State<HomeWithLogin> with WidgetsBindingObserv
       if (mounted) setState(() => _events = events);
     });
 
-    // 2. Locations (Real Users)
-    _locationsSubscription = _firestoreService.getAllUserLocationsStream().listen((allLocs) {
+    // 2. Locations (Real Users) - Now passing groupIds for targeted fetching
+    _locationsSubscription = _firestoreService.getAllUserLocationsStream(userId, groupIds).listen((allLocs) {
       if (!mounted) return;
       
-      // Filter by group members
+      // Filter by group members (Secondary filter for local safety)
       final userLocations = allLocs.where((loc) => myGroupMemberIds.contains(loc.userId)).toList();
       
-      // Merge with placeholder locations (if we have them)
-      setState(() {
-        final placeholderLocs = _locations.where((l) => l.userId.startsWith('placeholder_')).toList();
-        _locations = [...userLocations, ...placeholderLocs];
-      });
+      _realUserLocations = userLocations;
+      _updateCombinedLocations();
     });
 
     // 3. Placeholder Locations
     if (groupIds.isNotEmpty) {
       _placeholderLocationsSubscription = _firestoreService.getPlaceholderLocationsStream(userId, groupIds).listen((pLocs) {
         if (!mounted) return;
-        setState(() {
-          final realUserLocs = _locations.where((l) => !l.userId.startsWith('placeholder_')).toList();
-          _locations = [...realUserLocs, ...pLocs];
-        });
+        _placeholderUserLocations = pLocs;
+        _updateCombinedLocations();
       });
     }
 

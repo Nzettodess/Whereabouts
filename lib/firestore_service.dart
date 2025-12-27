@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'core/utils/logger.dart';
 import 'models.dart';
 import 'models/placeholder_member.dart';
 import 'models/join_request.dart';
@@ -14,7 +14,9 @@ class FirestoreService {
   FirestoreService._internal();
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
   final Uuid _uuid = const Uuid();
+  final AppLogger _log = const AppLogger('FirestoreService');
 
   // Cache for streams to prevent redundant listeners and support "cache-first" behavior
   final Map<String, Stream<List<GroupEvent>>> _eventsStreamCache = {};
@@ -23,8 +25,7 @@ class FirestoreService {
   final Map<String, Stream<List<Group>>> _groupsStreamCache = {};
   final Map<String, List<Group>> _lastGroupsCache = {};
 
-  final Map<String, Stream<List<UserLocation>>> _locationsStreamCache = {};
-  final Map<String, List<UserLocation>> _lastLocationsCache = {};
+  // Note: Location stream caches moved to global locations cache below
 
   final Map<String, Stream<Map<String, dynamic>>> _profileStreamCache = {};
   final Map<String, Map<String, dynamic>> _lastProfileCache = {};
@@ -44,10 +45,10 @@ class FirestoreService {
   // --- Groups ---
 
   Future<void> createGroup(String name, String userId) async {
-    print("Creating group: $name for user: $userId");
+    _log.trace('createGroup', {'name': name, 'userId': userId});
     try {
       final docRef = _db.collection('groups').doc();
-      print("Generated Group ID: ${docRef.id}");
+      _log.debug('Generated Group ID: ${docRef.id}');
       final group = Group(
         id: docRef.id,
         name: name,
@@ -55,7 +56,6 @@ class FirestoreService {
         admins: [userId],
         members: [userId],
       );
-      print("Group Map: ${group.toMap()}");
       await docRef.set(group.toMap());
       
       // Update creator's joinedGroupIds
@@ -63,9 +63,9 @@ class FirestoreService {
         'joinedGroupIds': FieldValue.arrayUnion([docRef.id]),
       });
       
-      print("Group created successfully");
-    } catch (e) {
-      print("Error creating group: $e");
+      _log.info('Group created successfully: ${docRef.id}');
+    } catch (e, stackTrace) {
+      _log.error('Failed to create group', e, stackTrace);
       rethrow;
     }
   }
@@ -158,7 +158,7 @@ class FirestoreService {
 
     if (updatedMembers.isEmpty) {
       // No members left - delete group and all related data
-      print('Deleting group $groupId and all related data...');
+      _log.info('Deleting group $groupId and all related data...');
       
       // Delete all events for this group
       final eventsSnapshot = await _db.collection('events')
@@ -167,7 +167,7 @@ class FirestoreService {
       
       for (var eventDoc in eventsSnapshot.docs) {
         await eventDoc.reference.delete();
-        print('Deleted event: ${eventDoc.id}');
+        _log.debug('Deleted event: ${eventDoc.id}');
       }
       
       // Delete all locations for this group (if locations have groupId field)
@@ -177,12 +177,12 @@ class FirestoreService {
       
       for (var locationDoc in locationsSnapshot.docs) {
         await locationDoc.reference.delete();
-        print('Deleted location: ${locationDoc.id}');
+        _log.debug('Deleted location: ${locationDoc.id}');
       }
       
       // Finally, delete the group itself
       await docRef.delete();
-      print('Group $groupId deleted successfully');
+      _log.info('Group $groupId deleted successfully');
       return;
     }
 
@@ -319,9 +319,9 @@ class FirestoreService {
       await _db.collection('users').doc(userId).set({
         'joinedGroupIds': groupIds,
       }, SetOptions(merge: true));
-      print('[FirestoreService] Synced ${groupIds.length} groups for user $userId');
-    } catch (e) {
-      print('[FirestoreService] Error syncing groups: $e');
+      _log.debug('Synced ${groupIds.length} groups for user $userId');
+    } catch (e, stackTrace) {
+      _log.error('Error syncing groups', e, stackTrace);
     }
   }
 
@@ -332,18 +332,34 @@ class FirestoreService {
     // Get all groups the user is in
     final groups = await getUserGroupsSnapshot(userId);
     
-    // Create location entry for each group
+    // Identify the requester
+    final currentUid = _auth.currentUser?.uid;
+    
+    // Create location entry for each group where requester has permission
     final batch = _db.batch();
     
-    for (final group in groups) {
-      final dateStr = "${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}";
+    // Use ISO string for date to avoid timezone issues
+    final isoDate = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+
+    final groupsToUpdate = groups.where((g) {
+      if (userId == currentUid) return true; // User can always update own docs
+      return g.ownerId == currentUid || g.admins.contains(currentUid); // Admin can update group docs
+    }).toList();
+
+    if (groupsToUpdate.isEmpty && userId != currentUid) {
+      _log.warning('No groups found where requester $currentUid has permission to update user $userId');
+      return;
+    }
+
+    for (final group in groupsToUpdate) {
+      final dateStr = isoDate.replaceAll('-', '');
       final docId = "${userId}_${group.id}_$dateStr";
       
       final locationRef = _db.collection('user_locations').doc(docId);
       batch.set(locationRef, {
         'userId': userId,
         'groupId': group.id,
-        'date': Timestamp.fromDate(date),
+        'date': isoDate,
         'nation': nation,
         'state': state,
       }, SetOptions(merge: true));
@@ -352,7 +368,35 @@ class FirestoreService {
     await batch.commit();
 
     // Notify groups (Async)
-    _notifyLocationChange(userId, groups, date, nation, state);
+    _notifyLocationChange(userId, groupsToUpdate, date, nation, state);
+  }
+
+  /// Delete Location for a specific date across all user's shared groups
+  Future<void> deleteLocation(String userId, DateTime date) async {
+    final groups = await getUserGroupsSnapshot(userId);
+    final currentUid = _auth.currentUser?.uid;
+    
+    // ISO date for lookup
+    final isoDate = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+    final dateStr = isoDate.replaceAll('-', '');
+    
+    final batch = _db.batch();
+    int ops = 0;
+
+    for (final group in groups) {
+      // Permission check: self or admin of this specific group
+      final hasPermission = (userId == currentUid) || (group.ownerId == currentUid || group.admins.contains(currentUid));
+      
+      if (hasPermission) {
+        final docId = "${userId}_${group.id}_$dateStr";
+        batch.delete(_db.collection('user_locations').doc(docId));
+        ops++;
+      }
+    }
+    
+    if (ops > 0) {
+      await batch.commit();
+    }
   }
 
   /// Helper to notify groups of location change
@@ -384,8 +428,8 @@ class FirestoreService {
         date: date,
         groupId: groups.isNotEmpty ? groups.first.id : '',
       );
-    } catch (e) {
-      print('Error notifying location change: $e');
+    } catch (e, stackTrace) {
+      _log.error('Error notifying location change', e, stackTrace);
     }
   }
 
@@ -411,21 +455,36 @@ class FirestoreService {
       currentDate = currentDate.add(const Duration(days: 1));
     }
     
+    // Identify the requester
+    final currentUid = _auth.currentUser?.uid;
+
+    // Filter groups where requester has permission
+    final groupsToUpdate = groups.where((g) {
+      if (userId == currentUid) return true; // Self
+      return g.ownerId == currentUid || g.admins.contains(currentUid); // Admin
+    }).toList();
+
+    if (groupsToUpdate.isEmpty && userId != currentUid) {
+      _log.warning('No groups found where requester $currentUid has permission to update user $userId for range');
+      return;
+    }
+
     // Firestore batch limit is 500 operations
     // Each date * each group = one operation
     const maxOpsPerBatch = 500;
     final allOperations = <Map<String, dynamic>>[];
-    
+
     for (final date in dates) {
-      for (final group in groups) {
-        final dateStr = "${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}";
+      final isoDate = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+      for (final group in groupsToUpdate) {
+        final dateStr = isoDate.replaceAll('-', '');
         final docId = "${userId}_${group.id}_$dateStr";
         
         allOperations.add({
           'docId': docId,
           'userId': userId,
           'groupId': group.id,
-          'date': Timestamp.fromDate(date),
+          'date': isoDate,
           'nation': nation,
           'state': state,
         });
@@ -455,7 +514,7 @@ class FirestoreService {
     }
 
     // Notify groups of range change
-    _notifyLocationRangeChange(userId, groups, startDate, endDate, nation, state);
+    _notifyLocationRangeChange(userId, groupsToUpdate, startDate, endDate, nation, state);
   }
 
   /// Helper to notify groups of location range change
@@ -486,8 +545,8 @@ class FirestoreService {
         endDate: end,
         groupId: groups.isNotEmpty ? groups.first.id : '',
       );
-    } catch (e) {
-      print('Error notifying location range change: $e');
+    } catch (e, stackTrace) {
+      _log.error('Error notifying location range change', e, stackTrace);
     }
   }
 
@@ -560,7 +619,7 @@ class FirestoreService {
       } catch (e) {
         // Permission denied when querying other user's notifications - this is expected
         // Just create a new notification instead
-        print('Deduplication query failed (expected for other users): $e');
+        _log.debug('Deduplication query failed (expected for other users): $e');
       }
     }
 
@@ -579,14 +638,14 @@ class FirestoreService {
             try {
               notifications.add(AppNotification.fromFirestore(doc));
             } catch (e) {
-              print('Error parsing notification ${doc.id}: $e');
+              _log.warning('Error parsing notification ${doc.id}: $e');
               // Skip malformed notifications instead of crashing
             }
           }
           return notifications;
         })
         .handleError((error) {
-          print('Error fetching notifications: $error');
+          _log.error('Error fetching notifications', error);
           return <AppNotification>[];
         });
   }
@@ -643,7 +702,7 @@ class FirestoreService {
 
   /// Update event with rolling version history (keeps 2 previous versions)
   Future<void> updateEvent(GroupEvent event, String editedByUserId) async {
-    debugPrint('[FirestoreService] Updating event: ${event.title}');
+    _log.debug('Updating event: ${event.title}');
     
     // Get current event data before updating for history
     final currentDoc = await _db.collection('events').doc(event.id).get();
@@ -674,7 +733,7 @@ class FirestoreService {
   }
 
   Future<void> deleteEvent(String eventId, String deleterId) async {
-    debugPrint('[FirestoreService] Deleting event: $eventId');
+    _log.debug('Deleting event: $eventId');
     final eventDoc = await _db.collection('events').doc(eventId).get();
     if (eventDoc.exists) {
         final eventData = eventDoc.data()!;
@@ -687,7 +746,7 @@ class FirestoreService {
         final groupDoc = await _db.collection('groups').doc(groupId).get();
         if (groupDoc.exists) {
             final group = Group.fromFirestore(groupDoc);
-            debugPrint('[FirestoreService] Notifying ${group.members.length} members for event deletion: $title');
+            _log.debug('Notifying ${group.members.length} members for event deletion: $title');
             await NotificationService().notifyEventDeleted(
                 memberIds: group.members,
                 deleterId: deleterId,
@@ -699,7 +758,7 @@ class FirestoreService {
   }
 
   Future<void> rsvpEvent(String eventId, String userId, String status) async {
-    debugPrint('[FirestoreService] User $userId RSVPing to event $eventId with status: $status');
+    _log.debug('User $userId RSVPing to event $eventId with status: $status');
     // Update RSVP
     await _db.collection('events').doc(eventId).update({
       'rsvps.$userId': status,
@@ -713,14 +772,14 @@ class FirestoreService {
       final event = GroupEvent.fromFirestore(eventDoc);
       // Don't notify if creator is RSVPing to their own event
       if (event.creatorId == userId) {
-        debugPrint('[FirestoreService] Skipping RSVP notification for event creator $userId');
+        _log.debug('Skipping RSVP notification for event creator $userId');
         return;
       }
       
       final userDoc = await _db.collection('users').doc(userId).get();
       final userName = userDoc.data()?['displayName'] ?? userDoc.data()?['email'] ?? 'Someone';
       
-      debugPrint('[FirestoreService] Notifying event creator ${event.creatorId} of RSVP from $userName for event ${event.title}');
+      _log.debug('Notifying event creator ${event.creatorId} of RSVP from $userName for event ${event.title}');
       await NotificationService().notifyRSVP(
         creatorId: event.creatorId,
         responderName: userName,
@@ -728,8 +787,8 @@ class FirestoreService {
         status: status,
         eventId: eventId,
       );
-    } catch (e) {
-      print('Error sending RSVP notification: $e');
+    } catch (e, stackTrace) {
+      _log.error('Error sending RSVP notification', e, stackTrace);
     }
   }
 
@@ -776,61 +835,76 @@ class FirestoreService {
     return _lastEventsCache[userId];
   }
 
-  Stream<List<GroupEvent>> _getAllUserEventsInternal(String userId) async* {
-    // Yield last seen data immediately if available (Cache First)
-    if (_lastEventsCache.containsKey(userId)) {
-      yield _lastEventsCache[userId]!;
-    }
+  Stream<List<GroupEvent>> _getAllUserEventsInternal(String userId) {
+    late StreamController<List<GroupEvent>> controller;
+    List<StreamSubscription> subscriptions = [];
+    final Map<int, List<GroupEvent>> batchResults = {};
 
-    // First get all groups the user is a member of
-    final groupsSnapshot = await _db
-        .collection('groups')
-        .where('members', arrayContains: userId)
-        .get();
-    
-    final groupIds = groupsSnapshot.docs.map((doc) => doc.id).toList();
-    
-    if (groupIds.isEmpty) {
-      _lastEventsCache[userId] = [];
-      yield [];
-      return;
-    }
-    
-    // Listen to events from all user's groups
-    const batchSize = 10;
-    final allEvents = <GroupEvent>[];
-    
-    // For simplicity with Multiple batches, we use a single combined list
-    // In a real app with many groups, you'd use rxdart CombineLatest
-    for (var i = 0; i < groupIds.length; i += batchSize) {
-      final batch = groupIds.skip(i).take(batchSize).toList();
-      
-      await for (final snapshot in _db
-          .collection('events')
-          .where('groupId', whereIn: batch)
-          .snapshots()) {
-        final events = snapshot.docs
-            .map((doc) => GroupEvent.fromFirestore(doc))
-            .toList();
-        
-        // Merge with existing events (avoid duplicates)
-        for (final event in events) {
-          final index = allEvents.indexWhere((e) => e.id == event.id);
-          if (index != -1) {
-            allEvents[index] = event; // Update existing
-          } else {
-            allEvents.add(event); // Add new
-          }
-        }
-        
-        // Sort by date (most recent first)
-        allEvents.sort((a, b) => b.date.compareTo(a.date));
-        
-        // Update cache and yield
-        _lastEventsCache[userId] = List.from(allEvents);
-        yield _lastEventsCache[userId]!;
+    void emitCombined() {
+      final allEvents = batchResults.values.expand((x) => x).toList();
+      // Sort by date (most recent first)
+      allEvents.sort((a, b) => b.date.compareTo(a.date));
+      _lastEventsCache[userId] = allEvents;
+      if (!controller.isClosed) {
+        controller.add(allEvents);
       }
     }
+
+    controller = StreamController<List<GroupEvent>>(
+      onListen: () async {
+        // Yield last seen data immediately if available (Cache First)
+        if (_lastEventsCache.containsKey(userId)) {
+          controller.add(_lastEventsCache[userId]!);
+        }
+
+        try {
+          // First get all groups the user is a member of
+          final groupsSnapshot = await _db
+              .collection('groups')
+              .where('members', arrayContains: userId)
+              .get();
+          
+          final groupIds = groupsSnapshot.docs.map((doc) => doc.id).toList();
+          
+          if (groupIds.isEmpty) {
+            _lastEventsCache[userId] = [];
+            controller.add([]);
+            return;
+          }
+
+          // Listen to events from all user's groups in batches
+          const batchSize = 10;
+          for (var i = 0; i < groupIds.length; i += batchSize) {
+            final batchIndex = i ~/ batchSize;
+            final batch = groupIds.skip(i).take(batchSize).toList();
+            
+            final sub = _db.collection('events')
+                .where('groupId', whereIn: batch)
+                .snapshots()
+                .listen((snapshot) {
+                  final events = snapshot.docs
+                      .map((doc) => GroupEvent.fromFirestore(doc))
+                      .toList();
+                  
+                  batchResults[batchIndex] = events;
+                  emitCombined();
+                }, onError: (e) {
+                  _log.error('Error fetching event batch $batchIndex', e);
+                });
+            
+            subscriptions.add(sub);
+          }
+        } catch (e, stackTrace) {
+          _log.error('Failed to setup event listeners', e, stackTrace);
+          if (!controller.isClosed) controller.addError(e);
+        }
+      },
+      onCancel: () {
+        for (final sub in subscriptions) { sub.cancel(); }
+      }
+    );
+
+    return controller.stream;
   }
 
   /// Get event attendees with their details
@@ -1035,14 +1109,14 @@ class FirestoreService {
                 batchResults[batchIndex] = users;
                 emitCombined();
              }, onError: (e) {
-                print('[FirestoreService] Error fetching batch $batchIndex: $e');
+                _log.warning('Error fetching batch $batchIndex: $e');
              });
              
            subscriptions.add(sub);
         }
       },
       onCancel: () {
-        for (final sub in subscriptions) sub.cancel();
+        for (final sub in subscriptions) { sub.cancel(); }
       }
     );
     
@@ -1086,47 +1160,71 @@ class FirestoreService {
     }
   }
 
-  Stream<List<UserLocation>> getAllUserLocationsStream() async* {
-    const cacheKey = 'global_locations';
-    if (_lastGlobalLocationsCache.containsKey(cacheKey)) {
-      yield _lastGlobalLocationsCache[cacheKey]!;
-    }
-    yield* _getAllUserLocationsShared();
-  }
+  Stream<List<UserLocation>> getAllUserLocationsStream(String userId, List<String> groupIds) {
+    if (groupIds.isEmpty) return Stream.value([]);
 
-  Stream<List<UserLocation>> _getAllUserLocationsShared() {
-    const cacheKey = 'global_locations';
-    if (_globalLocationsStreamCache.containsKey(cacheKey)) {
-      return _globalLocationsStreamCache[cacheKey]!;
+    late StreamController<List<UserLocation>> controller;
+    List<StreamSubscription> subscriptions = [];
+    final Map<int, List<UserLocation>> batchResults = {};
+
+    void emitCombined() {
+      final allLocs = batchResults.values.expand((x) => x).toList();
+      _lastGlobalLocationsCache[userId] = allLocs;
+      if (!controller.isClosed) {
+        controller.add(allLocs);
+      }
     }
 
-    late Stream<List<UserLocation>> stream;
-    stream = _getAllUserLocationsInternal().asBroadcastStream(
-       onCancel: (subscription) {
-        subscription.cancel();
-        _globalLocationsStreamCache.remove(cacheKey);
+    controller = StreamController<List<UserLocation>>(
+      onListen: () {
+        // Yield last seen data immediately if available (Cache First)
+        if (_lastGlobalLocationsCache.containsKey(userId)) {
+          controller.add(_lastGlobalLocationsCache[userId]!);
+        }
+
+        try {
+          // Listen to locations from all user's groups in batches
+          const batchSize = 10; // Safer batch size for whereIn
+          for (var i = 0; i < groupIds.length; i += batchSize) {
+            final batchIndex = i ~/ batchSize;
+            final batch = groupIds.skip(i).take(batchSize).toList();
+            
+            final sub = _db.collection('user_locations')
+                .where('groupId', whereIn: batch)
+                .snapshots()
+                .listen((snapshot) {
+                  final locations = snapshot.docs.map((doc) {
+                    try {
+                      return UserLocation.fromFirestore(doc.data());
+                    } catch (e) {
+                      _log.error('Error parsing location doc ${doc.id}', e);
+                      return null;
+                    }
+                  }).whereType<UserLocation>().toList();
+                  
+                  batchResults[batchIndex] = locations;
+                  emitCombined();
+                }, onError: (e) {
+                  _log.error('Error fetching location batch $batchIndex', e);
+                });
+            
+            subscriptions.add(sub);
+          }
+        } catch (e, stackTrace) {
+          _log.error('Failed to setup location listeners', e, stackTrace);
+          if (!controller.isClosed) controller.addError(e);
+        }
       },
+      onCancel: () {
+        for (final sub in subscriptions) { sub.cancel(); }
+      }
     );
-    _globalLocationsStreamCache[cacheKey] = stream;
-    return stream;
+
+    return controller.stream;
   }
 
-  List<UserLocation>? getLastSeenAllLocations() {
-    return _lastGlobalLocationsCache['global_locations'];
-  }
-
-  Stream<List<UserLocation>> _getAllUserLocationsInternal() async* {
-    if (_lastGlobalLocationsCache.containsKey('global_locations')) {
-      yield _lastGlobalLocationsCache['global_locations']!;
-    }
-
-    await for (final snapshot in _db.collection('user_locations').snapshots()) {
-      final locations = snapshot.docs
-          .map((doc) => UserLocation.fromFirestore(doc.data()))
-          .toList();
-      _lastGlobalLocationsCache['global_locations'] = locations;
-      yield locations;
-    }
+  List<UserLocation>? getLastSeenAllLocations(String userId) {
+    return _lastGlobalLocationsCache[userId];
   }
 
   // --- Placeholder Members ---
@@ -1183,65 +1281,74 @@ class FirestoreService {
     }
   }
 
-  Stream<List<UserLocation>> getPlaceholderLocationsStream(String userId, List<String> groupIds) async* {
-    if (_lastPlaceholderLocationsCache.containsKey(userId)) {
-      yield _lastPlaceholderLocationsCache[userId]!;
-    }
-    yield* _getPlaceholderLocationsShared(userId, groupIds);
-  }
+  Stream<List<UserLocation>> getPlaceholderLocationsStream(String userId, List<String> groupIds) {
+    if (groupIds.isEmpty) return Stream.value([]);
 
-  Stream<List<UserLocation>> _getPlaceholderLocationsShared(String userId, List<String> groupIds) {
-    if (_placeholderLocationsStreamCache.containsKey(userId)) {
-      return _placeholderLocationsStreamCache[userId]!;
+    late StreamController<List<UserLocation>> controller;
+    List<StreamSubscription> subscriptions = [];
+    final Map<int, List<UserLocation>> batchResults = {};
+
+    void emitCombined() {
+      final allLocs = batchResults.values.expand((x) => x).toList();
+      _lastPlaceholderLocationsCache[userId] = allLocs;
+      if (!controller.isClosed) {
+        controller.add(allLocs);
+      }
     }
 
-    late Stream<List<UserLocation>> stream;
-    stream = _getPlaceholderLocationsInternal(userId, groupIds).asBroadcastStream(
-      onCancel: (subscription) {
-        subscription.cancel();
-        _placeholderLocationsStreamCache.remove(userId);
+    controller = StreamController<List<UserLocation>>(
+      onListen: () {
+        // Yield last seen data immediately if available (Cache First)
+        if (_lastPlaceholderLocationsCache.containsKey(userId)) {
+          controller.add(_lastPlaceholderLocationsCache[userId]!);
+        }
+
+        try {
+          // Listen to locations from all user's groups in batches
+          const batchSize = 10;
+          for (var i = 0; i < groupIds.length; i += batchSize) {
+            final batchIndex = i ~/ batchSize;
+            final batch = groupIds.skip(i).take(batchSize).toList();
+            
+            final sub = _db.collection('placeholder_member_locations')
+                .where('groupId', whereIn: batch)
+                .snapshots()
+                .listen((snapshot) {
+                  final locations = snapshot.docs.map((doc) {
+                    try {
+                      final data = doc.data();
+                      // Map field names (placeholder location uses placeholderMemberId instead of userId)
+                      return UserLocation.fromFirestore({
+                        ...data,
+                        'userId': data['placeholderMemberId'],
+                      });
+                    } catch (e) {
+                      _log.error('Error parsing placeholder location doc ${doc.id}', e);
+                      return null;
+                    }
+                  }).whereType<UserLocation>().toList();
+                  
+                  batchResults[batchIndex] = locations;
+                  emitCombined();
+                });
+            
+            subscriptions.add(sub);
+          }
+        } catch (e, stackTrace) {
+          _log.error('Failed to setup placeholder location listeners', e, stackTrace);
+          if (!controller.isClosed) controller.addError(e);
+        }
       },
+      onCancel: () {
+        for (final sub in subscriptions) { sub.cancel(); }
+      }
     );
-    _placeholderLocationsStreamCache[userId] = stream;
-    return stream;
+
+    return controller.stream;
   }
 
   List<UserLocation>? getLastSeenPlaceholderLocations(String userId) {
     return _lastPlaceholderLocationsCache[userId];
-  }
-
-  Stream<List<UserLocation>> _getPlaceholderLocationsInternal(String userId, List<String> groupIds) async* {
-    if (_lastPlaceholderLocationsCache.containsKey(userId)) {
-      yield _lastPlaceholderLocationsCache[userId]!;
-    }
-
-    if (groupIds.isEmpty) {
-      _lastPlaceholderLocationsCache[userId] = [];
-      yield [];
-      return;
-    }
-
-    // Use first 10 groups for limit
-    final batch = groupIds.length > 10 ? groupIds.take(10).toList() : groupIds;
-
-    await for (final snapshot in _db
-        .collection('placeholder_member_locations')
-        .where('groupId', whereIn: batch)
-        .snapshots()) {
-      final locations = snapshot.docs.map((doc) {
-        final data = doc.data();
-        return UserLocation(
-          userId: data['placeholderMemberId'] ?? '',
-          groupId: data['groupId'] ?? 'global',
-          date: (data['date'] as Timestamp).toDate(),
-          nation: data['nation'] ?? '',
-          state: data['state'],
-        );
-      }).toList();
-      
-      _lastPlaceholderLocationsCache[userId] = locations;
-      yield locations;
-    }
   }
 
   /// Create a new placeholder member
@@ -1360,13 +1467,14 @@ class FirestoreService {
       
       for (var j = i; j < batchEnd; j++) {
         final date = dates[j];
-        final dateStr = "${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}";
+        final isoDate = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+        final dateStr = isoDate.replaceAll('-', '');
         final docId = "${placeholderMemberId}_$dateStr";
         
         batch.set(_db.collection('placeholder_member_locations').doc(docId), {
           'placeholderMemberId': placeholderMemberId,
           'groupId': groupId,
-          'date': Timestamp.fromDate(date),
+          'date': isoDate,
           'nation': nation,
           'state': state,
         }, SetOptions(merge: true));
@@ -1381,14 +1489,12 @@ class FirestoreService {
     String groupId,
     DateTime date,
   ) {
-    final startOfDay = DateTime(date.year, date.month, date.day);
-    final endOfDay = startOfDay.add(const Duration(days: 1));
+    final isoDate = "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
 
     return _db
         .collection('placeholder_member_locations')
         .where('groupId', isEqualTo: groupId)
-        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
-        .where('date', isLessThan: Timestamp.fromDate(endOfDay))
+        .where('date', isEqualTo: isoDate)
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => PlaceholderLocation.fromFirestore(doc.data()))
@@ -1446,7 +1552,7 @@ class FirestoreService {
         groupId: groupId,
       );
     } catch (e) {
-      print('Error sending inheritance request notification: $e');
+      _log.error('Error sending inheritance request notification: $e');
     }
   }
 
@@ -1711,9 +1817,27 @@ class FirestoreService {
   }
 
 
-  /// Cancel user's pending join requests (when they want to withdraw)
   Future<void> cancelJoinRequest(String requestId) async {
     await _db.collection('join_requests').doc(requestId).delete();
+  }
+
+  /// Clear all internal caches (used on logout)
+  void clearAllCaches() {
+    _eventsStreamCache.clear();
+    _lastEventsCache.clear();
+    _groupsStreamCache.clear();
+    _lastGroupsCache.clear();
+    _profileStreamCache.clear();
+    _lastProfileCache.clear();
+    _usersStreamCache.clear();
+    _lastUsersCache.clear();
+    _globalLocationsStreamCache.clear();
+    _lastGlobalLocationsCache.clear();
+    _placeholderMembersStreamCache.clear();
+    _lastPlaceholderMembersCache.clear();
+    _placeholderLocationsStreamCache.clear();
+    _lastPlaceholderLocationsCache.clear();
+    _log.info('All firestore caches cleared');
   }
 }
 

@@ -54,10 +54,20 @@ class UserLocation {
   });
 
   factory UserLocation.fromFirestore(Map<String, dynamic> data) {
+    DateTime parsedDate;
+    final dynamic dateData = data['date'];
+    if (dateData is Timestamp) {
+      parsedDate = dateData.toDate();
+    } else if (dateData is String) {
+      parsedDate = DateTime.tryParse(dateData) ?? DateTime.now();
+    } else {
+      parsedDate = DateTime.now();
+    }
+
     return UserLocation(
       userId: data['userId'] ?? '',
       groupId: data['groupId'] ?? '',
-      date: (data['date'] as Timestamp).toDate(),
+      date: parsedDate,
       nation: data['nation'] ?? '',
       state: data['state'],
     );
@@ -67,7 +77,7 @@ class UserLocation {
     return {
       'userId': userId,
       'groupId': groupId,
-      'date': Timestamp.fromDate(date),
+      'date': "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}",
       'nation': nation,
       'state': state,
     };
@@ -197,7 +207,7 @@ class AppNotification {
   });
 
   factory AppNotification.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final Map<String, dynamic> data = (doc.data() as Map?)?.cast<String, dynamic>() ?? {};
     
     // Handle null timestamp (can happen with pending server timestamps)
     DateTime timestamp;
@@ -291,6 +301,7 @@ class GroupEvent {
   final String? lastEditedBy; // userId of last editor
   final DateTime? lastEditedAt; // Timestamp of last edit
   final List<Map<String, dynamic>>? editHistory; // Max 2 previous versions
+  final String? timezone; // e.g. "Hong Kong" or "EST" (creator's context)
 
   GroupEvent({
     required this.id,
@@ -305,10 +316,11 @@ class GroupEvent {
     this.lastEditedBy,
     this.lastEditedAt,
     this.editHistory,
+    this.timezone,
   });
 
   factory GroupEvent.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final Map<String, dynamic> data = (doc.data() as Map?)?.cast<String, dynamic>() ?? {};
     return GroupEvent(
       id: doc.id,
       groupId: data['groupId'] ?? '',
@@ -326,6 +338,7 @@ class GroupEvent {
       editHistory: data['editHistory'] != null
           ? List<Map<String, dynamic>>.from(data['editHistory'])
           : null,
+      timezone: data['timezone'],
     );
   }
 
@@ -345,6 +358,7 @@ class GroupEvent {
     if (lastEditedBy != null) map['lastEditedBy'] = lastEditedBy;
     if (lastEditedAt != null) map['lastEditedAt'] = Timestamp.fromDate(lastEditedAt!);
     if (editHistory != null) map['editHistory'] = editHistory;
+    if (timezone != null) map['timezone'] = timezone;
     return map;
   }
 

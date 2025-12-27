@@ -94,6 +94,7 @@ class _AddEventModalState extends State<AddEventModal> {
           date: finalDate,
           hasTime: _hasTime,
           rsvps: widget.eventToEdit!.rsvps,
+          timezone: widget.eventToEdit!.timezone ?? DateTime.now().timeZoneName,
         );
         await _firestoreService.updateEvent(updatedEvent, widget.currentUserId);
         
@@ -125,6 +126,7 @@ class _AddEventModalState extends State<AddEventModal> {
         }
       } else {
         // Create new event
+        final tz = DateTime.now().timeZoneName;
         final event = GroupEvent(
           id: const Uuid().v4(),
           groupId: _selectedGroupId!,
@@ -135,6 +137,7 @@ class _AddEventModalState extends State<AddEventModal> {
           date: finalDate,
           hasTime: _hasTime,
           rsvps: {widget.currentUserId: 'Yes'},
+          timezone: tz,
         );
         await _firestoreService.createEvent(event);
         

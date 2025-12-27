@@ -27,7 +27,7 @@ class PlaceholderMember {
   });
 
   factory PlaceholderMember.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final Map<String, dynamic> data = (doc.data() as Map?)?.cast<String, dynamic>() ?? {};
     return PlaceholderMember(
       id: doc.id,
       groupId: data['groupId'] ?? '',
@@ -103,7 +103,7 @@ class InheritanceRequest {
   });
 
   factory InheritanceRequest.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final Map<String, dynamic> data = (doc.data() as Map?)?.cast<String, dynamic>() ?? {};
     return InheritanceRequest(
       id: doc.id,
       placeholderMemberId: data['placeholderMemberId'] ?? '',
@@ -150,10 +150,20 @@ class PlaceholderLocation {
   });
 
   factory PlaceholderLocation.fromFirestore(Map<String, dynamic> data) {
+    DateTime parsedDate;
+    final dynamic dateData = data['date'];
+    if (dateData is Timestamp) {
+      parsedDate = dateData.toDate();
+    } else if (dateData is String) {
+      parsedDate = DateTime.tryParse(dateData) ?? DateTime.now();
+    } else {
+      parsedDate = DateTime.now();
+    }
+
     return PlaceholderLocation(
       placeholderMemberId: data['placeholderMemberId'] ?? '',
       groupId: data['groupId'] ?? '',
-      date: (data['date'] as Timestamp).toDate(),
+      date: parsedDate,
       nation: data['nation'] ?? '',
       state: data['state'],
     );

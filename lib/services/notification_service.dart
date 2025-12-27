@@ -640,7 +640,7 @@ class NotificationService {
     final recipients = memberIds.where((id) => id != creatorId).toList();
     await sendNotificationToMany(
       userIds: recipients,
-      message: 'New event in $groupName: $eventTitle',
+      message: 'New event in $groupName: $eventTitle. Click to RSVP now!',
       type: NotificationType.eventCreated,
       title: eventTitle,
       groupId: groupId,

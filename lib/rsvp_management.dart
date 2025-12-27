@@ -281,6 +281,19 @@ class _EventCardState extends State<EventCard> {
   }
 
   @override
+  void didUpdateWidget(EventCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Refresh stats if the event object has changed (e.g. live update from firestore)
+    if (oldWidget.event != widget.event) {
+      _statsFuture = widget.firestoreService.getEventRSVPStats(widget.event, widget.event.groupId);
+      // If expanded, we also need to refresh the attendees future next time it loads
+      if (_isExpanded) {
+        _attendeesFuture = widget.firestoreService.getEventAttendees(widget.event.id, widget.event.groupId);
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _refreshTimer?.cancel();
     super.dispose();
@@ -345,7 +358,13 @@ class _EventCardState extends State<EventCard> {
     final isCreator = widget.event.creatorId == widget.currentUserId;
     final isAdminOrOwner = role == 'owner' || role == 'admin';
     final canManage = isCreator || isAdminOrOwner;
-    final isPastEvent = widget.event.date.isBefore(DateTime.now());
+    final now = DateTime.now();
+    final startOfToday = DateTime(now.year, now.month, now.day);
+    // If event has time, it's past if it's before now.
+    // If no time, it's past if the day is before today.
+    final isPastEvent = widget.event.hasTime 
+        ? widget.event.date.isBefore(now)
+        : widget.event.date.isBefore(startOfToday);
 
     return FutureBuilder<Map<String, dynamic>>(
       future: _statsFuture,
@@ -517,7 +536,33 @@ class _EventCardState extends State<EventCard> {
 
                       // Action buttons for creator/owner/admin (always show, disable if no pending)
                       if (canManage && !isPastEvent) ...[
-                        SizedBox(height: isVeryNarrow ? 8 : 12),
+                        const SizedBox(height: 12),
+                        const Divider(),
+                        const SizedBox(height: 12),
+                        
+                        // Your RSVP section
+                        Text(
+                          'YOUR RSVP',
+                          style: TextStyle(
+                            fontSize: 10, 
+                            fontWeight: FontWeight.bold, 
+                            color: Colors.grey[600],
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            _buildRSVPToggleButton('Yes', Colors.green, widget.event.rsvps[widget.currentUserId] == 'Yes'),
+                            const SizedBox(width: 8),
+                            _buildRSVPToggleButton('Maybe', Colors.orange, widget.event.rsvps[widget.currentUserId] == 'Maybe'),
+                            const SizedBox(width: 8),
+                            _buildRSVPToggleButton('No', Colors.red, widget.event.rsvps[widget.currentUserId] == 'No'),
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
@@ -547,6 +592,31 @@ class _EventCardState extends State<EventCard> {
                             ),
                           ),
                         ),
+                      ] else if (!isPastEvent) ...[
+                        const SizedBox(height: 12),
+                        const Divider(),
+                        const SizedBox(height: 12),
+                        
+                        // User's own RSVP toggle for regular participants
+                        Text(
+                          'YOUR RSVP',
+                          style: TextStyle(
+                            fontSize: 10, 
+                            fontWeight: FontWeight.bold, 
+                            color: Colors.grey[600],
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            _buildRSVPToggleButton('Yes', Colors.green, widget.event.rsvps[widget.currentUserId] == 'Yes'),
+                            const SizedBox(width: 8),
+                            _buildRSVPToggleButton('Maybe', Colors.orange, widget.event.rsvps[widget.currentUserId] == 'Maybe'),
+                            const SizedBox(width: 8),
+                            _buildRSVPToggleButton('No', Colors.red, widget.event.rsvps[widget.currentUserId] == 'No'),
+                          ],
+                        ),
                       ],
                     ],
                   ),
@@ -563,6 +633,63 @@ class _EventCardState extends State<EventCard> {
         );
       },
     );
+  }
+
+  Widget _buildRSVPToggleButton(String status, Color color, bool isSelected) {
+    return Expanded(
+      child: InkWell(
+        onTap: isSelected ? null : () => _updateRSVP(status),
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withOpacity(0.2) : Colors.transparent,
+            border: Border.all(
+              color: isSelected ? color : Colors.grey[300]!,
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isSelected) 
+                Icon(Icons.check, size: 14, color: color),
+              if (isSelected) const SizedBox(width: 4),
+              Text(
+                status,
+                style: TextStyle(
+                  color: isSelected ? color : Colors.grey[600],
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateRSVP(String status) async {
+    try {
+      // Optimistic UI update - though the stream will handle real state
+      await widget.firestoreService.rsvpEvent(widget.event.id, widget.currentUserId, status);
+      
+      // Refresh local stats if necessary (though the stream should trigger a rebuild)
+      if (mounted) {
+        setState(() {
+          _statsFuture = widget.firestoreService.getEventRSVPStats(widget.event, widget.event.groupId);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating RSVP: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   Widget _buildStatChip({

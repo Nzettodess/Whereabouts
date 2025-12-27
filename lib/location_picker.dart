@@ -44,6 +44,7 @@ class _LocationPickerState extends State<LocationPicker> {
   
   // Track selected members (current user always selected by default)
   late Set<String> selectedMemberIds;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -499,16 +500,31 @@ class _LocationPickerState extends State<LocationPicker> {
           child: SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {
+              onPressed: _isSaving ? null : () async {
                 if (countryValue != null && selectedMemberIds.isNotEmpty) {
-                  widget.onLocationSelected(
-                    countryValue!, 
-                    stateValue, 
-                    startDate, 
-                    endDate,
-                    selectedMemberIds.toList(),
-                  );
-                  Navigator.pop(context);
+                  setState(() => _isSaving = true);
+                  try {
+                    await widget.onLocationSelected(
+                      countryValue!, 
+                      stateValue, 
+                      startDate, 
+                      endDate,
+                      selectedMemberIds.toList(),
+                    );
+                    if (mounted) {
+                      Navigator.pop(context, true);
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+                      );
+                    }
+                  } finally {
+                    if (mounted) {
+                      setState(() => _isSaving = false);
+                    }
+                  }
                 } else if (countryValue == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text("Please select a country")),
@@ -524,10 +540,16 @@ class _LocationPickerState extends State<LocationPicker> {
                 foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              child: Text(
-                "Save Location for ${selectedMemberIds.length} member${selectedMemberIds.length > 1 ? 's' : ''} " 
-                "($_dayCount day${_dayCount > 1 ? 's' : ''})"
-              ),
+              child: _isSaving 
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : Text(
+                    "Save Location for ${selectedMemberIds.length} member${selectedMemberIds.length > 1 ? 's' : ''} " 
+                    "($_dayCount day${_dayCount > 1 ? 's' : ''})"
+                  ),
             ),
           ),
         ),

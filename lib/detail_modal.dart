@@ -371,7 +371,7 @@ class _DetailModalState extends State<DetailModal> {
     final placeholderName = userData['displayName'] ?? 'Placeholder';
     
     // Show location picker for date-specific editing - uses the standard "Set Location" UI
-    await showModalBottomSheet(
+    final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => Padding(
@@ -395,7 +395,11 @@ class _DetailModalState extends State<DetailModal> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(sheetContext),
+                    onPressed: () {
+                      if (Navigator.of(sheetContext).canPop()) {
+                        Navigator.of(sheetContext).pop();
+                      }
+                    },
                   ),
                 ],
               ),
@@ -411,7 +415,8 @@ class _DetailModalState extends State<DetailModal> {
               groupMembers: [],
               isOwnerOrAdmin: false,
               onLocationSelected: (country, state, startDate, endDate, selectedMemberIds) async {
-                final dateStr = "${widget.date.year}${widget.date.month.toString().padLeft(2, '0')}${widget.date.day.toString().padLeft(2, '0')}";
+                final isoDate = "${widget.date.year}-${widget.date.month.toString().padLeft(2, '0')}-${widget.date.day.toString().padLeft(2, '0')}";
+                final dateStr = isoDate.replaceAll('-', '');
                 final docId = "${element.userId}_$dateStr";
                 
                 await FirebaseFirestore.instance
@@ -420,13 +425,12 @@ class _DetailModalState extends State<DetailModal> {
                     .set({
                       'placeholderMemberId': element.userId,
                       'groupId': element.groupId,
-                      'date': Timestamp.fromDate(widget.date),
+                      'date': isoDate,
                       'nation': country,
                       'state': state,
                     });
                 
                 if (mounted) {
-                  Navigator.pop(context); // Close detail modal to refresh
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text("$placeholderName's location updated")),
                   );
@@ -438,6 +442,11 @@ class _DetailModalState extends State<DetailModal> {
        ),
       ),
     );
+    if (result == true && mounted) {
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(true);
+      }
+    }
   }
 
 
@@ -657,7 +666,9 @@ class _DetailModalState extends State<DetailModal> {
                             padding: EdgeInsets.zero,
                             onPressed: () {
                               if (!_checkCanWrite()) return;
-                              Navigator.pop(context);
+                              if (Navigator.of(context).canPop()) {
+                                Navigator.of(context).pop();
+                              }
                               showModalBottomSheet(
                                 context: context,
                                 isScrollControlled: true,
@@ -694,7 +705,11 @@ class _DetailModalState extends State<DetailModal> {
                               onPressed: () async {
                                 if (!_checkCanWrite()) return;
                                 await _firestoreService.deleteEvent(e.id, widget.currentUserId);
-                                if (mounted) Navigator.pop(context);
+                                if (mounted) {
+                                  if (Navigator.of(context).canPop()) {
+                                    Navigator.of(context).pop();
+                                  }
+                                }
                               },
                             ),
                           ),
@@ -914,7 +929,11 @@ class _DetailModalState extends State<DetailModal> {
                                                   ),
                                                   IconButton(
                                                     icon: const Icon(Icons.close),
-                                                    onPressed: () => Navigator.pop(sheetContext),
+                                                    onPressed: () {
+                                                      if (Navigator.of(sheetContext).canPop()) {
+                                                        Navigator.of(sheetContext).pop();
+                                                      }
+                                                    },
                                                   ),
                                                 ],
                                               ),
@@ -935,7 +954,6 @@ class _DetailModalState extends State<DetailModal> {
                                                   country,
                                                   state,
                                                 );
-                                                Navigator.pop(sheetContext, true);
                                               },
                                             ),
                                           ],
@@ -944,7 +962,9 @@ class _DetailModalState extends State<DetailModal> {
                                       ),
                                     );
                                     if (result == true && mounted) {
-                                      Navigator.pop(context); // Refresh detail modal
+                                      if (Navigator.of(context).canPop()) {
+                                        Navigator.of(context).pop(true); // Refresh detail modal
+                                      }
                                     }
 
                                   },
@@ -998,13 +1018,12 @@ class _DetailModalState extends State<DetailModal> {
                                     );
                                     
                                     if (confirm == true) {
-                                      final dateStr = "${widget.date.year}${widget.date.month.toString().padLeft(2, '0')}${widget.date.day.toString().padLeft(2, '0')}";
-                                      final docId = "${targetUserId}_${element.groupId}_$dateStr";
-                                      
-                                      // Always delete the document - app will fall back to default from user profile
-                                      await FirebaseFirestore.instance.collection('user_locations').doc(docId).delete();
-                                      
-                                      if (mounted) Navigator.pop(context); // Refresh
+                                      await _firestoreService.deleteLocation(targetUserId, widget.date);
+                                      if (mounted) {
+                                        if (Navigator.of(context).canPop()) {
+                                          Navigator.of(context).pop(true); // Refresh
+                                        }
+                                      }
                                     }
                                   },
                                   tooltip: isCurrentUser ? 'Delete (Revert to Default)' : 'Delete Member Location',

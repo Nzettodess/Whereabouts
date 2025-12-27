@@ -5,3 +5,4 @@ export 'theme/app_theme.dart';
 export 'theme/app_colors.dart';
 export 'utils/date_utils.dart';
 export 'utils/emoji_utils.dart';
+export 'utils/logger.dart';
