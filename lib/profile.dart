@@ -174,7 +174,8 @@ class _ProfileDialogState extends State<ProfileDialog> {
                     Expanded(
                       child: Builder(
                         builder: (context) {
-                          final isNarrow = MediaQuery.of(context).size.width < 450;
+                          final isNarrow = MediaQuery.of(context).size.width < 400;
+                          final isExtraNarrow = MediaQuery.of(context).size.width < 320;
                           return ElevatedButton(
                             onPressed: () async {
                               await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
@@ -189,8 +190,16 @@ class _ProfileDialogState extends State<ProfileDialog> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.getButtonBackground(context),
                               foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                              padding: isNarrow ? const EdgeInsets.symmetric(horizontal: 4) : null,
                             ),
-                            child: Text(isNarrow ? "Update" : "Update Name"),
+                            child: Text(
+                              "Update Name",
+                              style: TextStyle(
+                                // Tighten spacing on very narrow screens to prevent overflow
+                                letterSpacing: isExtraNarrow ? -0.8 : null,
+                                wordSpacing: isExtraNarrow ? -2.0 : null,
+                              ),
+                            ),
                           );
                         },
                       ),
