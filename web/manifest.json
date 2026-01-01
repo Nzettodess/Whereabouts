@@ -9,6 +9,9 @@
     "theme_color": "#673AB7",
     "description": "Keep your world in sync. A location and calendar coordination app for groups.",
     "orientation": "portrait-primary",
+    "launch_handler": {
+        "client_mode": "focus-existing"
+    },
     "prefer_related_applications": false,
     "categories": [
         "productivity",

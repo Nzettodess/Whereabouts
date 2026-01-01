@@ -1,3 +1,4 @@
+import 'dart:js' as js;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -368,7 +369,7 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                                       tooltip: 'Rename Group',
                                       onPressed: () => _renameGroup(group),
                                       padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                                      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                                     ),
                                 ],
                               ),
@@ -386,7 +387,39 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                               },
                               tooltip: 'Copy Group ID',
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                              constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.share, size: 20, color: Colors.blue),
+                              onPressed: () {
+                                String baseUrl = 'https://orbit-wheat-sigma.vercel.app/'; // Fallback
+                                try {
+                                  final origin = js.context['location']['origin'];
+                                  if (origin != null) baseUrl = origin;
+                                } catch (e) {
+                                  debugPrint('Error getting origin: $e');
+                                }
+
+                                final joinLink = '$baseUrl/?join=${group.id}';
+                                Clipboard.setData(ClipboardData(text: joinLink));
+
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text("Link Copied!"),
+                                    content: const Text("Join link has been copied to your clipboard.\n\nSend it to your friends to invite them to this group!"),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text("OK"),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              tooltip: 'Copy Join Link',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
                             ),
                           ],
                         ),

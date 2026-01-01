@@ -24,7 +24,8 @@ Orbit is a collaborative location and calendar coordination app for groups, buil
 - **🎂 Birthday Reliability**: Implemented lifecycle-aware, group-wide birthday checks to ensure notifications never miss a beat.
 - **🛡️ Admin Hierarchy**: Refined permissions to allow Admins to edit details while protecting Owners and other Admins from removal.
 - **✅ Join Flow Optimization**: Fixed "Permission Denied" errors during group entry and secured user profile updates.
-- **🔗 Deep Linking**: Improved notification deduplication and external ID sync.
+- **🔗 Join Link Invitations**: Users can now join groups via a shareable link. The app handles login and join requests automatically.
+- **🛠️ Stability & Dedup**: Improved notification deduplication, external ID sync, and fixed join link compilation issues.
 
 ## 🚀 Getting Started
 
