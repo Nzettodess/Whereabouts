@@ -63,7 +63,7 @@ Orbit is a collaborative location and calendar coordination app for groups, buil
 4. Create a `.env` file with your API keys:
 
    ```env
-   GOOGLE_API_KEY=your_google_api_key
+   GOOGLE_API_KEY=your_google_calendar_api_key
    ```
 
 5. Run the app:
