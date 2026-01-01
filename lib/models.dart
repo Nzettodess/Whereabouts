@@ -9,6 +9,8 @@ class Group {
   final String ownerId;
   final List<String> admins;
   final List<String> members;
+  final String? lastBirthdayCheck;
+  final String? lastMonthlyBirthdayCheck;
 
   Group({
     required this.id,
@@ -16,6 +18,8 @@ class Group {
     required this.ownerId,
     required this.admins,
     required this.members,
+    this.lastBirthdayCheck,
+    this.lastMonthlyBirthdayCheck,
   });
 
   factory Group.fromFirestore(DocumentSnapshot doc) {
@@ -26,6 +30,8 @@ class Group {
       ownerId: data['ownerId'] ?? '',
       admins: List<String>.from(data['admins'] ?? []),
       members: List<String>.from(data['members'] ?? []),
+      lastBirthdayCheck: data['lastBirthdayCheck'],
+      lastMonthlyBirthdayCheck: data['lastMonthlyBirthdayCheck'],
     );
   }
 
@@ -35,6 +41,8 @@ class Group {
       'ownerId': ownerId,
       'admins': admins,
       'members': members,
+      'lastBirthdayCheck': lastBirthdayCheck,
+      'lastMonthlyBirthdayCheck': lastMonthlyBirthdayCheck,
     };
   }
 }

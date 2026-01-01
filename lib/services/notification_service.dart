@@ -292,12 +292,12 @@ class NotificationService {
     }
   }
 
-  /// Send push notification via serverless function
   Future<String?> _sendPushNotification({
     required List<String> playerIds,
     required String message,
     String? title,
     Map<String, dynamic>? data,
+    String? pushDedupeKey, // Add external_id support for deduplication
   }) async {
     if (playerIds.isEmpty) {
       debugPrint('PUSH SKIP: playerIds list is empty');
@@ -333,6 +333,7 @@ class NotificationService {
           'title': title ?? 'Orbit',
           'message': message,
           'data': data,
+          'external_id': pushDedupeKey, // Pass custom ID for OneSignal deduplication
         }),
       );
       
@@ -471,6 +472,7 @@ class NotificationService {
     String? dedupeKeyPrefix,
     String? groupId,
     String? relatedId,
+    String? pushDedupeKey, // Add external_id for push deduplication
   }) async {
     if (userIds.isEmpty) return;
     
@@ -515,8 +517,9 @@ class NotificationService {
         message: message,
         title: title,
         data: {'type': type.name},
+        pushDedupeKey: pushDedupeKey,
       );
-      debugPrint('Batch push notification triggered');
+      debugPrint('Batch push notification triggered (Dedupe: $pushDedupeKey)');
     } catch (e) {
       debugPrint('Error in batch notification: $e');
     }
@@ -823,6 +826,8 @@ class NotificationService {
         ? '🏮 $birthdayPersonName\'s lunar birthday is today!'
         : '🎂 $birthdayPersonName\'s birthday is today!';
     
+    final pushDedupeKey = 'birthday_${groupId}_${birthdayPersonId}_${dateStr}_${isLunar ? 'lunar' : 'solar'}';
+    
     await sendNotificationToMany(
       userIds: recipients,
       message: message,
@@ -830,19 +835,25 @@ class NotificationService {
       dedupeKeyPrefix: 'birthday_${birthdayPersonId}_${dateStr}_${isLunar ? 'lunar' : 'solar'}',
       groupId: groupId,
       relatedId: birthdayPersonId,
+      pushDedupeKey: pushDedupeKey,
     );
   }
 
   /// Run all birthday checks (day-of and monthly summary)
-  /// If [force] is true, bypasses the "once per day" check.
+  /// Now group-aware: any member can trigger for the whole group.
   Future<void> checkAllBirthdays(String userId, {bool force = false}) async {
-    // 1. Check if we should run
+    // 1. Device-level throttler (Primary gate to prevent excessive Firestore reads on every resume)
     if (!force && !await shouldCheckBirthdaysToday()) {
-      debugPrint('Birthday check skipped: Already done today.');
+      debugPrint('Birthday check skipped: Already checked today on this device.');
       return;
     }
 
-    debugPrint('Running ${force ? "FORCED " : ""}birthday checks for user: $userId');
+    final today = DateTime.now();
+    final todayStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    final currentMonthStr = '${today.year}-${today.month}';
+    final todayNormalized = DateTime(today.year, today.month, today.day);
+
+    debugPrint('--- GROUP-AWARE BIRTHDAY CHECK START ---');
 
     try {
       // 2. Get user's groups
@@ -851,126 +862,141 @@ class NotificationService {
           .where('members', arrayContains: userId)
           .get();
 
-      if (groupsSnapshot.docs.isEmpty) return;
-
-      final today = DateTime.now();
-      final todayNormalized = DateTime(today.year, today.month, today.day);
-
-      // Collect all member IDs across all groups
-      final allMemberIds = <String>{};
-      final groupMemberMap = <String, List<String>>{}; // groupId -> memberIds
+      if (groupsSnapshot.docs.isEmpty) {
+        if (!force) await markBirthdayCheckDone();
+        return;
+      }
 
       for (final groupDoc in groupsSnapshot.docs) {
-        final members = List<String>.from(groupDoc.data()['members'] ?? []);
-        allMemberIds.addAll(members);
-        groupMemberMap[groupDoc.id] = members;
-      }
+        final group = Group.fromFirestore(groupDoc);
+        final groupId = group.id;
+        final memberIds = group.members;
 
-      // Fetch all users' birthday data
-      final usersToCheck = allMemberIds.where((id) => id != userId).toList();
-      final birthdayPeopleThisMonth = <String>[];
+        // Check if group-level check is already done for today
+        final bool groupDailyDone = group.lastBirthdayCheck == todayStr;
+        final bool groupMonthlyDone = group.lastMonthlyBirthdayCheck == currentMonthStr;
 
-      // 3. Process Real Users
-      for (final memberId in usersToCheck) {
-        final userDoc = await _db.collection('users').doc(memberId).get();
-        if (!userDoc.exists) continue;
-
-        final userData = userDoc.data()!;
-        userData['uid'] = memberId;
-        final displayName = userData['displayName'] ?? userData['email'] ?? 'User';
-        _userNameCache[memberId] = displayName;
-
-        // --- Day-of Checks ---
-        final solarBirthday = Birthday.getSolarBirthday(userData, today.year);
-        if (solarBirthday != null && DateTime(solarBirthday.occurrenceDate.year, solarBirthday.occurrenceDate.month, solarBirthday.occurrenceDate.day) == todayNormalized) {
-          for (final entry in groupMemberMap.entries) {
-            if (entry.value.contains(memberId)) {
-              await notifyBirthday(memberIds: [userId], birthdayPersonId: memberId, birthdayPersonName: solarBirthday.displayName, isLunar: false, groupId: entry.key);
-              break;
-            }
-          }
+        if (!force && groupDailyDone && (today.day != 1 || groupMonthlyDone)) {
+          debugPrint('Group $groupId: Birthday check already done today ($todayStr). Skipping.');
+          continue;
         }
 
-        final lunarBirthday = Birthday.getLunarBirthday(userData, today.year, today);
-        if (lunarBirthday != null) {
-          for (final entry in groupMemberMap.entries) {
-            if (entry.value.contains(memberId)) {
-              await notifyBirthday(memberIds: [userId], birthdayPersonId: memberId, birthdayPersonName: lunarBirthday.displayName, isLunar: true, groupId: entry.key);
-              break;
-            }
-          }
-        }
+        debugPrint('Processing Group $groupId (${group.name})...');
+        final birthdayPeopleThisMonth = <String>[];
+        final membersToNotifyMonthly = List<String>.from(memberIds);
 
-        // --- Monthly Summary Check ---
-        if (today.day == 1 || force) {
-          if (solarBirthday != null && solarBirthday.occurrenceDate.month == today.month) {
-            final day = solarBirthday.occurrenceDate.day;
-            birthdayPeopleThisMonth.add('$displayName (${day}${_getDaySuffix(day)})');
-          }
-          // Lunar month check
-          for (int day = 1; day <= DateTime(today.year, today.month + 1, 0).day; day++) {
-            final checkDate = DateTime(today.year, today.month, day);
-            if (Birthday.getLunarBirthday(userData, today.year, checkDate) != null) {
-              birthdayPeopleThisMonth.add('$displayName 🏮 (${day}${_getDaySuffix(day)})');
-              break;
-            }
-          }
-        }
-      }
+        // A. Process real users in this group
+        for (final memberId in memberIds) {
+          final userDoc = await _db.collection('users').doc(memberId).get();
+          if (!userDoc.exists) continue;
 
-      // 4. Process Placeholder Members
-      for (final groupId in groupMemberMap.keys) {
-        final phSnapshot = await _db.collection('placeholder_members').where('groupId', isEqualTo: groupId).get();
-        for (final phDoc in phSnapshot.docs) {
-          final ph = PlaceholderMember.fromFirestore(phDoc);
-          final displayName = ph.displayName;
+          final userData = userDoc.data()!;
+          userData['uid'] = memberId;
+          final displayName = userData['displayName'] ?? userData['email'] ?? 'User';
 
-          // Day-of Solar
-          final solarBirthday = Birthday.fromPlaceholderMember(ph, today.year);
-          if (solarBirthday != null && DateTime(solarBirthday.occurrenceDate.year, solarBirthday.occurrenceDate.month, solarBirthday.occurrenceDate.day) == todayNormalized) {
-            await notifyBirthday(memberIds: [userId], birthdayPersonId: ph.id, birthdayPersonName: displayName, isLunar: false, groupId: groupId);
+          // Solar Birthday (Today)
+          final solarBirthday = Birthday.getSolarBirthday(userData, today.year);
+          if (solarBirthday != null && 
+              DateTime(solarBirthday.occurrenceDate.year, solarBirthday.occurrenceDate.month, solarBirthday.occurrenceDate.day) == todayNormalized) {
+            await notifyBirthday(
+              memberIds: memberIds, 
+              birthdayPersonId: memberId, 
+              birthdayPersonName: displayName, 
+              isLunar: false, 
+              groupId: groupId
+            );
           }
 
-          // Day-of Lunar
-          final lunarBirthday = Birthday.fromPlaceholderLunar(ph, today.year, today);
+          // Lunar Birthday (Today)
+          final lunarBirthday = Birthday.getLunarBirthday(userData, today.year, today);
           if (lunarBirthday != null) {
-            await notifyBirthday(memberIds: [userId], birthdayPersonId: ph.id, birthdayPersonName: displayName, isLunar: true, groupId: groupId);
+            await notifyBirthday(
+              memberIds: memberIds, 
+              birthdayPersonId: memberId, 
+              birthdayPersonName: displayName, 
+              isLunar: true, 
+              groupId: groupId
+            );
           }
 
-          // Monthly Summary Inclusion
+          // Monthly Collection
           if (today.day == 1 || force) {
             if (solarBirthday != null && solarBirthday.occurrenceDate.month == today.month) {
               final day = solarBirthday.occurrenceDate.day;
               birthdayPeopleThisMonth.add('$displayName (${day}${_getDaySuffix(day)})');
             }
-            // Lunar month check for placeholders
-            for (int day = 1; day <= DateTime(today.year, today.month + 1, 0).day; day++) {
-              final checkDate = DateTime(today.year, today.month, day);
-              if (Birthday.fromPlaceholderLunar(ph, today.year, checkDate) != null) {
-                birthdayPeopleThisMonth.add('$displayName 🏮 (${day}${_getDaySuffix(day)})');
+            // Lunar month check
+            for (int d = 1; d <= DateTime(today.year, today.month + 1, 0).day; d++) {
+              final checkDate = DateTime(today.year, today.month, d);
+              if (Birthday.getLunarBirthday(userData, today.year, checkDate) != null) {
+                birthdayPeopleThisMonth.add('$displayName 🏮 (${d}${_getDaySuffix(d)})');
                 break;
               }
             }
           }
         }
+
+        // B. Process placeholders in this group
+        final phSnapshot = await _db.collection('placeholder_members').where('groupId', isEqualTo: groupId).get();
+        for (final phDoc in phSnapshot.docs) {
+          final ph = PlaceholderMember.fromFirestore(phDoc);
+          final displayName = ph.displayName;
+
+          // Solar
+          final solarBirthday = Birthday.fromPlaceholderMember(ph, today.year);
+          if (solarBirthday != null && 
+              DateTime(solarBirthday.occurrenceDate.year, solarBirthday.occurrenceDate.month, solarBirthday.occurrenceDate.day) == todayNormalized) {
+            await notifyBirthday(memberIds: memberIds, birthdayPersonId: ph.id, birthdayPersonName: displayName, isLunar: false, groupId: groupId);
+          }
+
+          // Lunar
+          final lunarBirthday = Birthday.fromPlaceholderLunar(ph, today.year, today);
+          if (lunarBirthday != null) {
+            await notifyBirthday(memberIds: memberIds, birthdayPersonId: ph.id, birthdayPersonName: displayName, isLunar: true, groupId: groupId);
+          }
+
+          // Monthly
+          if (today.day == 1 || force) {
+            if (solarBirthday != null && solarBirthday.occurrenceDate.month == today.month) {
+              final day = solarBirthday.occurrenceDate.day;
+              birthdayPeopleThisMonth.add('$displayName (${day}${_getDaySuffix(day)})');
+            }
+            for (int d = 1; d <= DateTime(today.year, today.month + 1, 0).day; d++) {
+              final checkDate = DateTime(today.year, today.month, d);
+              if (Birthday.fromPlaceholderLunar(ph, today.year, checkDate) != null) {
+                birthdayPeopleThisMonth.add('$displayName 🏮 (${d}${_getDaySuffix(d)})');
+                break;
+              }
+            }
+          }
+        }
+
+        // C. Monthly Summary Notification
+        if (birthdayPeopleThisMonth.isNotEmpty && (force || !groupMonthlyDone)) {
+          debugPrint('Group $groupId: Notifying monthly summary...');
+          await notifyMonthlyBirthdays(
+            userIds: membersToNotifyMonthly,
+            birthdayPeople: birthdayPeopleThisMonth,
+            month: today.month,
+            groupId: groupId,
+          );
+          if (!force) {
+             await _db.collection('groups').doc(groupId).update({'lastMonthlyBirthdayCheck': currentMonthStr});
+          }
+        }
+
+        // D. Mark Group-level daily check as done
+        if (!force) {
+          await _db.collection('groups').doc(groupId).update({'lastBirthdayCheck': todayStr});
+        }
       }
 
-      // Send monthly summary
-      if (birthdayPeopleThisMonth.isNotEmpty && (force || await shouldShowMonthlyBirthdaySummary())) {
-        await notifyMonthlyBirthdays(
-          userId: userId,
-          birthdayPeople: birthdayPeopleThisMonth,
-          month: today.month,
-        );
-        if (!force) await markMonthlyBirthdaySummaryDone();
-      }
-
-      // Mark check as done
+      // 3. Mark Device-level check as done
       if (!force) await markBirthdayCheckDone();
-      debugPrint('Birthday checks completed for $userId');
+      debugPrint('--- GROUP-AWARE BIRTHDAY CHECK COMPLETE ---');
 
     } catch (e) {
-      debugPrint('Error during birthday checks: $e');
+      debugPrint('Error during group-aware birthday checks: $e');
     }
   }
 
@@ -986,11 +1012,12 @@ class NotificationService {
 
   /// Send monthly birthday summary notification
   Future<void> notifyMonthlyBirthdays({
-    required String userId,
+    required List<String> userIds,
     required List<String> birthdayPeople,
     required int month,
+    required String groupId,
   }) async {
-    if (birthdayPeople.isEmpty) return;
+    if (birthdayPeople.isEmpty || userIds.isEmpty) return;
     
     final monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -999,12 +1026,17 @@ class NotificationService {
     final message = birthdayPeople.length == 1
         ? '🎂 $monthName Birthday: ${birthdayPeople.first}'
         : '🎂 $monthName Birthdays: ${birthdayPeople.join(', ')}';
-    
-    await sendNotification(
-      userId: userId,
+        
+    final today = DateTime.now();
+    final pushDedupeKey = 'birthdayMonth_${groupId}_${today.year}_$month';
+
+    await sendNotificationToMany(
+      userIds: userIds,
       message: message,
       type: NotificationType.birthdayMonthly,
-      dedupeKey: 'birthdayMonth_${DateTime.now().year}_$month',
+      dedupeKeyPrefix: 'birthdayMonth_${today.year}_$month',
+      groupId: groupId,
+      pushDedupeKey: pushDedupeKey,
     );
   }
 

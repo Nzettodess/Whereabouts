@@ -8,14 +8,15 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    const { playerIds, title, message, data } = req.body;
-    
+    const { playerIds, title, message, data, external_id } = req.body;
+
     // VERBOSE LOGGING: Start request tracking
     console.log('--- PUSH NOTIFICATION REQUEST START ---');
     console.log('Target PlayerIds (UIDs):', playerIds);
     console.log('Title:', title);
     console.log('Message:', message);
     console.log('Data:', data);
+    console.log('External ID:', external_id);
 
     if (!playerIds || !Array.isArray(playerIds) || !message) {
         console.error('ERROR: Missing required fields');
@@ -37,10 +38,10 @@ export default async function handler(req, res) {
             include_aliases: {
                 external_id: playerIds
             },
-            target_channel: 'push',
             headings: { en: title || 'Orbit' },
             contents: { en: message },
             data: data || {},
+            external_id: external_id,
         };
 
         console.log('OneSignal Payload:', JSON.stringify(payload, null, 2));

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'credits_feedback_dialog.dart';
+import '../services/services.dart';
 
 class HomeDrawer extends StatelessWidget {
   final User? user;
@@ -132,6 +133,15 @@ class HomeDrawer extends StatelessWidget {
               );
             },
           ),
+          if (PWAService().isInstallPromptAvailable())
+            ListTile(
+              leading: const Icon(Icons.install_mobile, color: Colors.green),
+              title: const Text("Install App"),
+              onTap: () {
+                Navigator.pop(context);
+                PWAService().triggerInstall();
+              },
+            ),
           const SizedBox(height: 8),
         ],
       ),

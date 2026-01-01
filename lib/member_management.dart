@@ -113,13 +113,8 @@ class _MemberManagementState extends State<MemberManagement> {
     final isThisOwner = memberId == _group.ownerId;
     final isThisAdmin = _group.admins.contains(memberId);
     
-    // Determine edit permission (same logic as _buildTrailingActions)
-    bool canEdit = false;
-    if (isOwner) {
-      canEdit = !isThisOwner; // Owner can edit everyone but self (self edit via profile)
-    } else if (isAdmin) {
-      canEdit = !isThisOwner && !isThisAdmin; // Admin can edit members only
-    }
+    // Determine edit permission (Owners/Admins can edit anyone else in the group)
+    bool canEdit = canManage && memberId != widget.currentUserId;
     
     showDialog(
       context: context,
@@ -149,19 +144,8 @@ class _MemberManagementState extends State<MemberManagement> {
     }
     
     // Determine hierarchy: Owner > Admin > Member
-    // canEditThis = true if current user has higher rank than target
-    bool canEditThis = false;
-    
-    if (isOwner) {
-      // Owner can edit everyone except themselves
-      canEditThis = !isThisOwner;
-    } else if (isAdmin) {
-      // Admin can only edit Members (not Owner, not other Admins)
-      canEditThis = !isThisOwner && !isThisAdmin;
-    } else {
-      // Regular member can't edit anyone
-      canEditThis = false;
-    }
+    // Can edit anyone else in the group if you are Owner/Admin
+    bool canEditThis = canManage && !isCurrentUser;
     
     // Members don't see any options button
     if (!canManage) {
@@ -231,17 +215,18 @@ class _MemberManagementState extends State<MemberManagement> {
               ],
             ),
           ),
-        // Remove from group
-        const PopupMenuItem(
-          value: 'remove',
-          child: Row(
-            children: [
-              Icon(Icons.person_remove, color: Colors.red),
-              SizedBox(width: 8),
-              Text('Remove from Group'),
-            ],
+        // Remove from group - Owner can kick anyone, Admins can only kick Members
+        if (isOwner || (!isThisAdmin && !isThisOwner))
+          const PopupMenuItem(
+            value: 'remove',
+            child: Row(
+              children: [
+                Icon(Icons.person_remove, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Remove from Group'),
+              ],
+            ),
           ),
-        ),
         // Transfer - only owner can transfer
         if (isOwner)
           const PopupMenuItem(

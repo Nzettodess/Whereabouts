@@ -539,6 +539,19 @@ class _HomeWithLoginState extends State<HomeWithLogin>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    debugPrint('App Lifecycle State Changed: $state');
+    
+    if (state == AppLifecycleState.resumed) {
+      if (_user != null) {
+        debugPrint('App Resumed - Triggering background birthday checks...');
+        _checkBirthdayNotifications(_user!.uid);
+      }
+    }
+  }
+
+  @override
   void didChangeMetrics() {
     super.didChangeMetrics();
     // Use both viewInsets and platformDispatcher for better compatibility across platforms (App/Web)

@@ -409,16 +409,41 @@
       // Detect mobile
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-      if (isStandalone || dismissed || !isMobile) {
-        return; // Already installed, dismissed, or not mobile
+      if (isStandalone || dismissed) {
+        return; // Already installed or dismissed
       }
 
       // Capture beforeinstallprompt for Android/Chrome
       window.addEventListener('beforeinstallprompt', function (e) {
         e.preventDefault();
-        deferredPrompt = e;
+        window.deferredPrompt = e;
         banner.style.display = 'block';
+        console.log('[PWA] beforeinstallprompt captured');
       });
+
+      // Expose trigger function for Flutter
+      window.triggerPWAInstall = function () {
+        if (window.deferredPrompt) {
+          console.log('[PWA] Triggering native install prompt');
+          window.deferredPrompt.prompt();
+          window.deferredPrompt.userChoice.then(function (result) {
+            if (result.outcome === 'accepted') {
+              banner.style.display = 'none';
+            }
+            window.deferredPrompt = null;
+          });
+        } else if (isIOS) {
+          console.log('[PWA] Triggering iOS install modal');
+          iosModal.style.display = 'flex';
+        } else {
+          console.warn('[PWA] No install prompt available');
+        }
+      };
+
+      // Expose check function for Flutter
+      window.isPWAInstallAvailable = function () {
+        return !!window.deferredPrompt || isIOS;
+      };
 
       // Show banner for iOS after short delay
       if (isIOS) {
@@ -427,21 +452,9 @@
         }, 3000);
       }
 
-      // Install button click
+      // Install button click (Legacy UI support)
       installBtn.addEventListener('click', function () {
-        if (deferredPrompt) {
-          // Android - trigger native prompt
-          deferredPrompt.prompt();
-          deferredPrompt.userChoice.then(function (result) {
-            if (result.outcome === 'accepted') {
-              banner.style.display = 'none';
-            }
-            deferredPrompt = null;
-          });
-        } else if (isIOS) {
-          // iOS - show instructions modal
-          iosModal.style.display = 'flex';
-        }
+        window.triggerPWAInstall();
       });
 
       // Close banner
