@@ -67,6 +67,10 @@ Orbit is a collaborative location and calendar coordination app for groups, buil
    flutter run -d chrome
    ```
 
+## ⚠️ Known Issues
+
+- **Android PWA Keyboard**: Some Android devices may experience UI shifts or difficulty interacting with text areas when the virtual keyboard is active. We are actively working on a more robust viewport-aware solution.
+
 ## ⭐ Support
 
 If you find Orbit useful, please consider giving it a star! It helps others discover the project.
