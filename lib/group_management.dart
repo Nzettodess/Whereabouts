@@ -398,11 +398,18 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                               icon: const Icon(Icons.copy, size: 20),
                               onPressed: () {
                                 Clipboard.setData(ClipboardData(text: group.id));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Group ID copied!'),
-                                    duration: const Duration(seconds: 2),
-                                  )
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text("Copied!"),
+                                    content: const Text("Group ID copied to clipboard."),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text("OK"),
+                                      ),
+                                    ],
+                                  ),
                                 );
                               },
                               tooltip: 'Copy Group ID',
@@ -421,21 +428,43 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                                 }
 
                                 final joinLink = 'Click this link to join our group on Orbit: $baseUrl/?join=${group.id}';
-                                Clipboard.setData(ClipboardData(text: joinLink));
+                                
+                                // Try native web share first (mobile)
+                                bool shareSuccess = false;
+                                try {
+                                  if (js.context.hasProperty('navigator') && 
+                                      js.context['navigator'].hasProperty('share')) {
+                                    js.context['navigator'].callMethod('share', [
+                                      js.JsObject.jsify({
+                                        'title': 'Join my Orbit Group',
+                                        'text': joinLink,
+                                        'url': '$baseUrl/?join=${group.id}',
+                                      })
+                                    ]);
+                                    shareSuccess = true;
+                                  }
+                                } catch (e) {
+                                  debugPrint('Web Share API failed, falling back to clipboard: $e');
+                                }
 
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: const Text("Link Copied!"),
-                                    content: const Text("Join link has been copied to your clipboard.\n\nSend it to your friends to invite them to this group!"),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: const Text("OK"),
-                                      ),
-                                    ],
-                                  ),
-                                );
+                                // Fallback to clipboard if native share not available or failed
+                                if (!shareSuccess) {
+                                  Clipboard.setData(ClipboardData(text: joinLink));
+
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: const Text("Link Copied!"),
+                                      content: const Text("Join link copied to clipboard.\n\nShare it with your friends!"),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(context),
+                                          child: const Text("OK"),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }
                               },
                               tooltip: 'Copy Join Link',
                               padding: EdgeInsets.zero,
