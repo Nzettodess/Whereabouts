@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orbit User Manual</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <!-- Mobile Menu Toggle -->
+    <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+    <div class="overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h1>Orbit Guide</h1>
+        </div>
+        <ul class="nav-links">
+            <li>
+                <a href="#welcome" class="active">Welcome & Setup</a>
+                <ul>
+                    <li><a href="#install">Installation</a></li>
+                </ul>
+            </li>
+            <li>
+                <a href="#getting-started">Getting Started</a>
+                <ul>
+                    <li>
+                        <a href="#groups">Your Community</a>
+                        <ul>
+                            <li><a href="#join-group">Joining a Group</a></li>
+                            <li><a href="#create-group">Creating a Group</a></li>
+                            <li><a href="#share-group">Sharing a Group</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="#profile">Profile Setup</a></li>
+                </ul>
+            </li>
+            <li>
+                <a href="#community">Community Management</a>
+                <ul>
+                    <li><a href="#roles">User Roles</a></li>
+                    <li><a href="#icons">UI Icons</a></li>
+                    <li><a href="#placeholders">Placeholders</a></li>
+                </ul>
+            </li>
+            <li>
+                <a href="#settings">App Settings</a>
+                <ul>
+                    <li><a href="#holidays">Public Holidays</a></li>
+                    <li><a href="#calendar-view">Calendar View</a></li>
+                    <li><a href="#privacy">Privacy</a></li>
+                </ul>
+            </li>
+            <li>
+                <a href="#notifications">Notifications</a>
+                <ul>
+                    <li><a href="#notif-center">Notification Center</a></li>
+                    <li><a href="#upcoming">Upcoming Summary</a></li>
+                </ul>
+            </li>
+            <li>
+                <a href="#events">Events & RSVP</a>
+                <ul>
+                    <li><a href="#create-event">Creating Events</a></li>
+                    <li><a href="#rsvp">RSVP System</a></li>
+                    <li><a href="#locations">Locations</a></li>
+                </ul>
+            </li>
+            <li><a href="#feedback">Feedback</a></li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+
+        <section id="welcome">
+            <h2>Welcome to Orbit</h2>
+            <p>Your all-in-one community management tool used for Events, Locations, and Group Coordination.</p>
+
+            <h3 id="install">Installation & Launch</h3>
+            <p>Access the app directly via your browser or install it for the best experience.</p>
+            <ul>
+                <li><strong>Web URL:</strong> <a href="https://orbit-wheat-sigma.vercel.app/" target="_blank">Launch
+                        Orbit Web</a></li>
+                <li><strong>Best Experience:</strong> Open your installed app if available.</li>
+            </ul>
+
+            <div class="alert-info">
+                <strong>Why Install?</strong>
+                <ul>
+                    <li>✅ <strong>Push Notifications</strong> for event updates.</li>
+                    <li>✅ <strong>Offline View</strong> capability.</li>
+                    <li>✅ Faster, native-like performance.</li>
+                </ul>
+            </div>
+
+            <div class="placeholder-img">
+                <img src="images/install_benefits.png" alt="Installation Benefits"
+                    onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/install_benefits.png</code> here showing PWA Install prompt</span>'">
+            </div>
+
+            <div class="alert-warning">
+                <strong>⚠️ Storage Warning</strong><br>
+                Do <strong>NOT</strong> install if your device has less than <strong>100kb</strong> of free storage.
+                <div class="placeholder-img" style="min-height: 100px; margin-top: 10px;">
+                    <img src="images/storage_warning.png" alt="Storage Usage"
+                        onerror="this.parentElement.innerHTML='<span style=\'padding:10px\'>Drop <code>images/storage_warning.png</code> here showing actual storage usage</span>'">
+                </div>
+            </div>
+
+            <div class="alert-warning">
+                <strong>📲 iOS Users Notice</strong><br>
+                Web Apps on iOS <strong>must be added to Home Screen</strong> to receive notifications. Safari browser
+                does not support push notifications by itself.
+            </div>
+        </section>
+
+        <section id="getting-started">
+            <h2>Getting Started</h2>
+
+            <h3 id="groups">Step 1: Your Community</h3>
+            <p>Everything in Orbit revolves around Groups. You must be in a group to do anything.</p>
+
+            <div class="placeholder-img">
+                <img src="images/group_concept.png" alt="Groups Concept"
+                    onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/group_concept.png</code> here showing empty state or group list</span>'">
+            </div>
+
+            <h3 id="join-group" style="font-size: 1.1rem; margin-top: 20px;">Joining a Group</h3>
+            <p>If you have been invited:</p>
+            <ol>
+                <li>Click the <strong>Join Link</strong> sent to you, OR</li>
+                <li>Copy the <strong>Group ID</strong> and click "Join Group" in the app, then paste the ID.</li>
+            </ol>
+
+            <h5>Join by ID Step-by-Step:</h5>
+            <ol>
+                <li>
+                    <strong>Step 1:</strong> On the Home Screen/Calendar, tap the Menu icon.
+                    <div class="placeholder-img">
+                        <img src="images/join_step1.png" alt="Step 1: Home Screen" style="max-width: 300px">
+                    </div>
+                </li>
+                <li>
+                    <strong>Step 2:</strong> In the menu, tap <strong>Groups</strong>.
+                    <div class="placeholder-img">
+                        <img src="images/join_step2.png" alt="Step 2: Menu Groups" style="max-width: 300px">
+                    </div>
+                </li>
+                <li>
+                    <strong>Step 3:</strong> Tap the <strong>Join Group</strong> button.
+                    <div class="placeholder-img">
+                        <img src="images/join_step3.png" alt="Step 3: Join Button" style="max-width: 300px">
+                    </div>
+                </li>
+                <li>
+                    <strong>Step 4:</strong> Enter the ID and tap Request to Join.
+                    <div class="placeholder-img">
+                        <img src="images/join_step4.png" alt="Step 4: Enter ID" style="max-width: 300px">
+                    </div>
+                </li>
+            </ol>
+
+            <h3 id="create-group" style="font-size: 1.1rem; margin-top: 20px;">Creating a Group</h3>
+            <p>Start a new community by clicking <strong>Create Group</strong>. You will automatically become the Owner.
+            </p>
+
+            <div class="placeholder-img">
+                <img src="images/join_create_group.png" alt="Join or Create Group Screen"
+                    onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/join_create_group.png</code> here showing Join/Create buttons</span>'">
+            </div>
+
+            <h3 id="share-group" style="font-size: 1.1rem; margin-top: 20px;">Sharing Your Group</h3>
+            <p>Once your group is created, invite others by sharing the <strong>Group ID</strong> or a direct
+                <strong>Join Link</strong>.
+            </p>
+            <ul>
+                <li><strong>Copy ID:</strong> Tap the copy icon next to the Group ID in the group list.</li>
+                <li><strong>Share Link:</strong> Send a message to your friends.</li>
+            </ul>
+
+            <div class="alert-info">
+                <strong>Example Invitation:</strong><br>
+                Hey! Join my group "Family Code" on Orbit.<br>
+                <strong>Group ID:</strong> <code>123-456</code><br>
+                <strong>Join Link:</strong> <a href="#">https://orbit-wheat-sigma.vercel.app/?joinCode=123-456</a>
+            </div>
+
+            <div class="placeholder-img">
+                <img src="images/share_group.png" alt="Sharing Group ID"
+                    onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/share_group.png</code> here showing the Copy ID button</span>'">
+            </div>
+
+            <h3 id="profile">Step 2: Profile Setup</h3>
+            <p>Your profile helps your group identify you and coordinates logistics.</p>
+            <ul>
+                <li><strong>Display Name:</strong> Pick a recognizable name.</li>
+                <li><strong>Default Location:</strong> Set your base country/city. This determines your default
+                    <strong>Public Holidays</strong>.
+                </li>
+                <li><strong>Birthday:</strong>
+                    <ul>
+                        <li><strong>Solar Birthday:</strong> Standard date.</li>
+                        <li><strong>Lunar Birthday:</strong> Enable this if you celebrate according to the Lunar
+                            calendar.</li>
+                    </ul>
+                </li>
+            </ul>
+
+            <div class="placeholder-img">
+                <img src="images/profile_setup.png" alt="Profile Setup Screen"
+                    onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/profile_setup.png</code> here showing Profile Dialog with Birthday options</span>'">
+            </div>
+        </section>
+
+        <section id="community">
+            <h2>Community Management</h2>
+
+            <h3 id="roles">User Roles</h3>
+            <p>Understanding who can do what within a group:</p>
+            <table border="1" style="border-collapse: collapse; width: 100%; border-color: #eee;">
+                <tr style="background-color: var(--primary-color); color: white;">
+                    <th style="padding: 10px;">Role</th>
+                    <th style="padding: 10px;">Capabilities</th>
+                </tr>
+                <tr>
+                    <td style="padding: 10px;"><strong>Owner</strong> (👑)</td>
+                    <td style="padding: 10px;">Full Control. Can Transfer Ownership, Delete Group, Manage EVERYTHING.
+                        Only one owner per group.</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px;"><strong>Admin</strong> (🛡️)</td>
+                    <td style="padding: 10px;">Moderator. Can Promote Members to Admin, Remove Members (but not other
+                        Admins), Manage Placeholders, Approve Join Requests.</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px;"><strong>Member</strong></td>
+                    <td style="padding: 10px;">Basic Access. View events, Create events, RSVP, Set own location.</td>
+                </tr>
+            </table>
+
+            <h3 id="icons">UI Icons Guide</h3>
+            <p>Familiarize yourself with the icons used in the Group List and settings:</p>
+            <ul style="list-style: none; padding-left: 0;">
+                <li style="margin-bottom: 10px; display: flex; align-items: center;">
+                    <span style="font-size: 1.5em; margin-right: 10px;">👥</span>
+                    <div>
+                        <strong>Group Members:</strong><br>
+                        <span style="font-size: 0.9em; color: #666;">Shows the list of real users in the group.</span>
+                    </div>
+                </li>
+                <li style="margin-bottom: 10px; display: flex; align-items: center;">
+                    <span style="font-size: 1.5em; margin-right: 10px;">👻</span>
+                    <div>
+                        <strong>Placeholder Members:</strong><br>
+                        <span style="font-size: 0.9em; color: #666;">Manage offline members (kids, elders). (Icon may
+                            vary)</span>
+                    </div>
+                </li>
+                <li style="margin-bottom: 10px; display: flex; align-items: center;">
+                    <span style="font-size: 1.5em; margin-right: 10px;">🚪</span>
+                    <div>
+                        <strong>Exit Group:</strong><br>
+                        <span style="font-size: 0.9em; color: #666;">Leave the current community.</span>
+                    </div>
+                </li>
+            </ul>
+
+            <div class="placeholder-img" style="margin-bottom: 20px;">
+                <img src="images/top_nav_icons.png" alt="Top Navigation Icons">
+                <p style="text-align: center; margin: 5px 0 0; font-size: 0.8em; color: #666;">Navigation Bar: Upcoming
+                    Summary, Birthday, Notifications, Profile</p>
+            </div>
+
+            <div class="placeholder-img">
+                <img src="images/group_ui_icons.png" alt="Group UI Icons"
+                    onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/group_ui_icons.png</code> here showing the Group Settings/List UI</span>'">
+            </div>
+
+            <h3 id="placeholders">Placeholder Members</h3>
+            <p><strong>What are they?</strong><br>Profiles for people who are part of the group offline (e.g., children,
+                elderly parents) but don't use the app themselves.</p>
+
+            <ul>
+                <li><strong>Managers:</strong> Owners and Admins can create, edit, and delete Placeholders.</li>
+                <li><strong>Usage:</strong> You can add locations and RSVP to events <em>on their behalf</em>.</li>
+            </ul>
+
+            <h4>Inheritance (Claiming a Profile)</h4>
+            <p>If a Placeholder member eventually joins the app:</p>
+            <ol>
+                <li>The real user sends an <strong>Inheritance Request</strong> for that specific placeholder.</li>
+                <li>An Admin approves it.</li>
+                <li><strong>Result:</strong> All data (locations, RSVPs) from the Placeholder merges into the new Real
+                    User, and the Placeholder is removed.</li>
+            </ol>
+
+            <div class="placeholder-img">
+                <img src="images/placeholder_management.png" alt="Placeholder Management"
+                    onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/placeholder_management.png</code> here showing Placeholder list</span>'">
+            </div>
+        </section>
+
+        <section id="settings">
+            <h2>App Settings & Holidays</h2>
+
+            <h3 id="holidays">Public Holidays</h3>
+            <p>Orbit automatically shows public holidays on your calendar based on two sources:</p>
+            <ol>
+                <li><strong>Default Location:</strong> From your personal Profile.</li>
+                <li><strong>Additional Nation:</strong> Select one extra country in <em>Settings</em> (e.g., for work or
+                    remote family).</li>
+            </ol>
+
+            <h4>Religious Calendars</h4>
+            <p>You can subscribe to extra holiday sets which will overlay on your calendar:</p>
+            <ul>
+                <li>🏮 Chinese Lunar</li>
+                <li>☪️ Islamic (Hijri)</li>
+                <li>✡️ Jewish</li>
+                <li>🕉️ Hindu</li>
+                <li>✝️ Christian</li>
+            </ul>
+
+            <div class="placeholder-img">
+                <img src="images/holiday_settings.png" alt="Holiday Settings"
+                    onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/holiday_settings.png</code> here showing Holiday checkboxes</span>'">
+            </div>
+
+            <h3 id="calendar-view">Calendar View</h3>
+            <p>You can toggle the main calendar tiles to display dates in <strong>Gregorian</strong> (default),
+                <strong>Chinese Lunar</strong>, or <strong>Hijri</strong> format.
+            </p>
+
+            <div class="placeholder-img">
+                <img src="images/calendar_view.png" alt="Calendar View Options"
+                    onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/calendar_view.png</code> here showing Calendar Tiles</span>'">
+            </div>
+
+            <h3 id="privacy">Privacy: "Block Edit"</h3>
+            <p>By default, Group Admins can help manage your details (like location) for coordination. You can block
+                this in <strong>Settings > Privacy</strong>.</p>
+            <ul>
+                <li><strong>Block Default Location:</strong> Only you can change your home city.</li>
+                <li><strong>Block Location for Date:</strong> Prevent admins from setting your travel location.</li>
+                <li><strong>Block Birthday:</strong> Lock your birthday details.</li>
+                <li><strong>Block All:</strong> Master switch for total privacy.</li>
+            </ul>
+
+        </section>
+
+        <section id="notifications">
+            <h2>Notifications & Upcoming</h2>
+            <p>Stay on top of what's happening in your group.</p>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                <div style="flex: 1; min-width: 250px;">
+                    <h3 id="notif-center" style="margin-top: 0; font-size: 1.1rem;">Notification Center</h3>
+                    <p>Tap the bell icon <span style="font-size: 1.2em;">🔔</span> (Top Nav) to see requests, birthdays,
+                        and
+                        reminders.</p>
+                    <div class="placeholder-img">
+                        <img src="images/notification_center.png" alt="Notification Center">
+                    </div>
+                </div>
+                <div style="flex: 1; min-width: 250px;">
+                    <h3 id="upcoming" style="margin-top: 0; font-size: 1.1rem;">Upcoming Summary</h3>
+                    <p>Tap the first icon (Top Nav) or list icon to see the full agenda view.</p>
+                    <div class="placeholder-img">
+                        <img src="images/upcoming_list.png" alt="Upcoming List">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="events">
+            <h2>Events & Activities</h2>
+
+            <h3 id="create-event">Creating Events</h3>
+            <p>Tap the big orange <strong>+</strong> button (Speed Dial) to start actions:</p>
+            <div class="placeholder-img" style="max-width: 200px; margin: 10px auto;">
+                <img src="images/fab_menu.png" alt="Quick Actions Menu">
+            </div>
+            <p>Select <strong>Add Event</strong> to schedule:</p>
+            <ul>
+                <li><strong>Title & Date/Time:</strong> The essentials.</li>
+                <li><strong>Description:</strong> Supports <strong>Markdown</strong> (Bold, Italic, Lists) for beautiful
+                    invites.</li>
+                <li><strong>Venue:</strong> Paste a Google Maps link! It becomes clickable for everyone.</li>
+            </ul>
+
+            <div class="placeholder-img">
+                <img src="images/create_event.png" alt="Create Event Screen"
+                    onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/create_event.png</code> here showing Event Form</span>'">
+            </div>
+
+            <h3 id="rsvp">RSVP System</h3>
+            <p>You can set your status, check who else is coming, and even send reminders.</p>
+            <ul>
+                <li><strong>Status Options:</strong> No / Maybe / Yes.</li>
+                <li><strong>Manual Reminders:</strong> Admins, Owners, or the Event Creator can send a notification to
+                    everyone who hasn't answered yet (Limit: once every 24h).</li>
+            </ul>
+
+            <h5>Visual Guide: How to RSVP & Check Stats</h5>
+            <p>Accessing the Event Card:</p>
+
+            <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 40px;">
+                <!-- Method 1 -->
+                <div style="flex: 1; min-width: 280px; text-align: center;">
+                    <h6>Method 1: Calendar</h6>
+                    <div class="placeholder-img" style="max-width: 250px; margin: 0 auto;">
+                        <img src="images/rsvp_step1_calendar.png" alt="Calendar">
+                    </div>
+                    <div style="font-size: 24px; color: #aaa; margin: 5px 0;">⬇</div>
+                    <div class="placeholder-img" style="max-width: 250px; margin: 0 auto;">
+                        <img src="images/rsvp_event_card.png" alt="Event Card"
+                            onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/rsvp_event_card.png</code> (Clean Card)</span>'">
+                    </div>
+
+                    <div style="margin: 15px 0 5px; font-weight: bold; color: #673AB7;">Option B:</div>
+                    <div class="placeholder-img" style="max-width: 250px; margin: 0 auto;">
+                        <img src="images/rsvp_click_purple.png" alt="Click Purple"
+                            onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/rsvp_click_purple.png</code> (Card with Purple Clicked)</span>'">
+                    </div>
+
+                    <div style="font-size: 24px; color: #aaa; margin: 5px 0;">⬇</div>
+                    <div class="placeholder-img" style="max-width: 250px; margin: 0 auto;">
+                        <img src="images/rsvp_step4_stats.png" alt="Stats View">
+                    </div>
+                    <p style="font-size: 0.9em; color: #666; margin-top: 5px;">Calendar &rarr; Card &rarr; Stats</p>
+                </div>
+
+                <!-- Method 2 -->
+                <div style="flex: 1; min-width: 280px; text-align: center; border-left: 1px solid #eee;">
+                    <h6>Method 2: Sidebar</h6>
+                    <div class="placeholder-img" style="max-width: 250px; margin: 0 auto;">
+                        <img src="images/rsvp_step2_menu.png" alt="Sidebar">
+                    </div>
+                    <div style="font-size: 24px; color: #aaa; margin: 5px 0;">⬇</div>
+                    <div class="placeholder-img" style="max-width: 250px; margin: 0 auto;">
+                        <img src="images/rsvp_step4_stats.png" alt="Stats View">
+                    </div>
+                    <p style="font-size: 0.9em; color: #666; margin-top: 5px;">Sidebar &rarr; Stats (Shortcut)</p>
+                </div>
+            </div>
+
+            <h6>Make your Choice (from Event Card):</h6>
+            <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                <!-- Left: RSVP Select -->
+                <div style="flex: 1; min-width: 280px; text-align: center;">
+                    <p><strong>Option A: RSVP Select</strong> <span style="color: #4CAF50;">(Green Icon)</span></p>
+                    <div class="placeholder-img" style="max-width: 250px; margin: 0 auto;">
+                        <img src="images/rsvp_click_green.png" alt="Click Green"
+                            onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/rsvp_click_green.png</code> (Card with Green Clicked)</span>'">
+                    </div>
+                    <div style="font-size: 24px; color: #4CAF50; margin: 10px 0;">⬇</div>
+                    <p>Opens <strong>RSVP Select Dialog</strong></p>
+                    <div class="placeholder-img" style="max-width: 250px; margin: 0 auto;">
+                        <img src="images/rsvp_step5_admin_dialog.png" alt="RSVP Select Dialog">
+                    </div>
+                </div>
+
+                <!-- Right: Stats -->
+                <div style="flex: 1; min-width: 280px; text-align: center; border-left: 1px solid #eee;">
+                    <p><strong>Option B: RSVP Stats</strong> <span style="color: #673AB7;">(Purple Icon)</span></p>
+                    <div class="placeholder-img" style="max-width: 250px; margin: 0 auto;">
+                        <img src="images/rsvp_click_purple.png" alt="Click Purple"
+                            onerror="this.parentElement.innerHTML='<span style=\'padding:20px\'>Drop <code>images/rsvp_click_purple.png</code> (Card with Purple Clicked)</span>'">
+                    </div>
+                    <div style="font-size: 24px; color: #673AB7; margin: 10px 0;">⬇</div>
+                    <p>Opens <strong>Detail View</strong></p>
+                    <div class="placeholder-img" style="max-width: 250px; margin: 0 auto;">
+                        <img src="images/rsvp_step4_stats.png" alt="Stats View">
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert-info">
+                <strong>Admin Power:</strong> Admins can manually set RSVP status for <strong>any member</strong> or
+                <strong>placeholder</strong>. Useful if someone tells you offline they are coming!
+            </div>
+
+            <h3 id="locations">Locations</h3>
+            <p>Add your travel or current location to the group map/list. This helps everyone know where you are!</p>
+            <div class="placeholder-img">
+                <img src="images/set_location_dialog.png" alt="Set Location Dialog">
+            </div>
+            <p><strong>Admin Power:</strong> like RSVPs, Admins can add location entries for other members (unless
+                blocked by their Privacy Settings).</p>
+            <section id="feedback">
+                <h2>Feedback & Support</h2>
+                <p>Found a bug or have a feature request? We'd love to hear from you!</p>
+
+                <h3>Reporting Issues</h3>
+                <p>You can report bugs directly via GitHub.</p>
+                <ul>
+                    <li><strong>GitHub Issues:</strong> <a
+                            href="https://github.com/Nzettodess/Orbit">https://github.com/Nzettodess/Orbit</a></li>
+                </ul>
+
+                <div class="placeholder-img" style="max-width: 300px; margin: 20px auto;">
+                    <img src="images/about_dialog.png" alt="About Dialog with Feedback">
+                </div>
+
+                <div class="alert-info">
+                    <strong>💡 Tip: Export Device Info</strong><br>
+                    When reporting a bug, please include your <strong>Device Model</strong> and <strong>App
+                        Version</strong>.
+                    <br>(We will add a "Copy Info" button in Settings soon!)
+                </div>
+            </section>
+
+            <p style="text-align: center; color: #999; margin-top: 50px; font-size: 0.8rem;">
+                Orbit User Manual &copy; 2026
+            </p>
+
+    </div>
+
+    <!-- Scroll Spy & Mobile Toggle Script -->
+    <script>
+        // Toggle Sidebar on Mobile
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.querySelector('.overlay').classList.toggle('active');
+            document.querySelector('.menu-toggle').classList.toggle('hidden');
+        }
+
+        // Close sidebar when clicking a link on mobile
+        document.querySelectorAll('.nav-links a').forEach(link => {
+            link.addEventListener('click', () => {
+                if (window.innerWidth <= 768) {
+                    toggleSidebar();
+                }
+            });
+        });
+
+        // Scroll Spy to highlight active section in sidebar
+        const sections = document.querySelectorAll("section, h3");
+        const navLi = document.querySelectorAll(".nav-links a");
+
+        window.onscroll = () => {
+            var current = "";
+
+            sections.forEach((section) => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.clientHeight;
+                if (pageYOffset >= (sectionTop - 150)) {
+                    current = section.getAttribute("id");
+                }
+            });
+
+            navLi.forEach((li) => {
+                li.classList.remove("active");
+                if (li.getAttribute("href").includes(current)) {
+                    li.classList.add("active");
+                }
+            });
+        };
+    </script>
+</body>
+
+</html>
