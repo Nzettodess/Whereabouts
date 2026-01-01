@@ -14,6 +14,17 @@ Orbit is a collaborative location and calendar coordination app for groups, buil
 - **Real-time Sync**: Instant updates across all devices using Firebase.
 - **Dark Mode**: Full dark/light theme support.
 - **PWA Support**: Install as a Progressive Web App on any device.
+- **Admin Controls**: Role-based access and member management.
+
+## 📝 Update Log
+
+### [1.0.1] - 2026-01-01
+
+- **🚀 PWA Manual Install**: Added "Install App" button in drawer for Desktop (Chrome/Edge) and Mobile (Android/iOS).
+- **🎂 Birthday Reliability**: Implemented lifecycle-aware, group-wide birthday checks to ensure notifications never miss a beat.
+- **🛡️ Admin Hierarchy**: Refined permissions to allow Admins to edit details while protecting Owners and other Admins from removal.
+- **✅ Join Flow Optimization**: Fixed "Permission Denied" errors during group entry and secured user profile updates.
+- **🔗 Deep Linking**: Improved notification deduplication and external ID sync.
 
 ## 🚀 Getting Started
 

@@ -102,8 +102,10 @@ service cloud.firestore {
         // User can update ANY fields of their own profile
         userId() == uid ||
         // Owner/Admin can update ONLY these specific fields for other members
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['defaultLocation', 'birthday', 'hasLunarBirthday', 'lunarBirthdayMonth', 'lunarBirthdayDay', 'joinedGroupIds'])
+        // SECURED: Must share at least one group with the target user
+        (request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['defaultLocation', 'birthday', 'hasLunarBirthday', 'lunarBirthdayMonth', 'lunarBirthdayDay', 'joinedGroupIds']) &&
+         request.resource.data.joinedGroupIds.hasAny(get(/databases/$(database)/documents/users/$(userId())).data.joinedGroupIds))
       );
       
       // Delete not allowed (handled by account deletion flow)
@@ -137,7 +139,7 @@ service cloud.firestore {
          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['ownerId'])) ||
         // Any member can update birthday check timestamps (Group-wide trigger)
         (userId() in resource.data.members &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastBirthdayCheck', 'lastMonthlyBirthdayCheck'])),
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastBirthdayCheck', 'lastMonthlyBirthdayCheck'])) ||
         // Any member can LEAVE (remove themselves from members and optionally admins)
         (userId() in resource.data.members &&
          !(userId() in request.resource.data.members) &&
