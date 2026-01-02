@@ -76,23 +76,14 @@ service cloud.firestore {
         userId() == uid || 
         // 1. SECURED: If target has groups, requester must share at least one.
         (
+        // 2. PRIVACY ENFORCEMENT for Profiles:
+        // Users can ONLY read profiles of people they share a group with.
+        resource.id == request.auth.uid || 
+        (
           "joinedGroupIds" in get(/databases/$(database)/documents/users/$(userId())).data && 
           resource.data.joinedGroupIds.hasAny(get(/databases/$(database)/documents/users/$(userId())).data.joinedGroupIds)
-        ) ||
-        // 2. TEMPORARY: Allow access if the target user has a pending request to a group the viewer admins
-        // This is hard to enforce strictly in rules without collection group queries.
-        // SAFE RELAXATION: Allow reading minimal profile info (display name) if authenticated? 
-        // Current implementation is strict. 
-        //
-        // ALTERNATIVE: Use the app-side fix (embedding name in request).
-        // 
-        // However, if we MUST allow read:
-        // We can't easily check the join_request existence in rules.
-        //
-        // Let's implement the 'Public Profile' concept where name/photo are readable by any auth user.
-        // This is common practice and solves the issue of "stranger" interactions.
-        true 
-      );
+        )
+      ));
       
       // User can only create their own document
       allow create: if isAuthenticated() && userId() == uid;
@@ -123,7 +114,14 @@ service cloud.firestore {
     match /groups/{groupId} {
       // Any authenticated user can read groups (needed for join verification)
       // App-level filtering ensures users only see their own groups in UI
-      allow read: if isAuthenticated();
+      // 1. DISCOVERY: Allow getting a SINGLE group by ID (if you know the ID)
+      // This allows finding a group to join.
+      allow get: if isAuthenticated();
+
+      // 2. PRIVACY: Only allow LISTING groups if you are a member
+      allow list: if isAuthenticated() && (
+        userId() in resource.data.members
+      );
       
       // Any authenticated user can create a group
       allow create: if isAuthenticated() && 
@@ -143,6 +141,8 @@ service cloud.firestore {
         // Any member can LEAVE (remove themselves from members and optionally admins)
         (userId() in resource.data.members &&
          !(userId() in request.resource.data.members) &&
+         // CRITICAL: Owner CANNOT leave (must transfer ownership first)
+         userId() != resource.data.ownerId &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'admins', 'ownerId']))
       );
       

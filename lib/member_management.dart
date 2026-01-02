@@ -444,53 +444,38 @@ class _MemberManagementState extends State<MemberManagement> {
   }
 
   Widget _buildJoinRequestTile(JoinRequest request) {
-    // If name is generic 'Someone' or 'Unknown User', try to fetch the real name
-    // (This requires read permission on the user profile, which public profiles allow)
-    Widget buildName(String cachedName) {
-      if (cachedName != 'Someone' && cachedName != 'Unknown User') {
-        return Text(
-          cachedName,
-          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-          overflow: TextOverflow.ellipsis,
+    // 1. Photo Avatar
+    Widget buildAvatar() {
+      if (request.requesterPhotoUrl != null && request.requesterPhotoUrl!.isNotEmpty) {
+        return CircleAvatar(
+          radius: 16,
+          backgroundImage: NetworkImage(request.requesterPhotoUrl!),
+          backgroundColor: AppColors.getPendingBg(context),
+          onBackgroundImageError: (_, __) {}, // Fail silently to icon
         );
       }
-
-      return FutureBuilder<DocumentSnapshot>(
-        future: FirebaseFirestore.instance.collection('users').doc(request.requesterId).get(),
-        builder: (context, snapshot) {
-          if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
-            final data = snapshot.data!.data() as Map<String, dynamic>;
-            final name = data['displayName'] ?? data['email'] ?? 'Someone';
-            return Text(
-              name,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-              overflow: TextOverflow.ellipsis,
-            );
-          }
-          return Text(
-            cachedName,
-            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-            overflow: TextOverflow.ellipsis,
-          );
-        },
+      return CircleAvatar(
+        radius: 16,
+        backgroundColor: AppColors.getPendingBg(context),
+        child: Icon(Icons.person_outline, size: 18, color: AppColors.getPendingAccent(context)),
       );
     }
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: AppColors.getPendingBg(context),
-            child: Icon(Icons.person_outline, size: 18, color: AppColors.getPendingAccent(context)),
-          ),
+          buildAvatar(),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                buildName(request.requesterName),
+                Text(
+                  request.requesterName,
+                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                ),
                 Text(
                   'Requested ${DateFormat('MMM d').format(request.createdAt)}',
                   style: TextStyle(fontSize: 10, color: Theme.of(context).hintColor),

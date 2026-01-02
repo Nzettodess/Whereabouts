@@ -100,9 +100,10 @@ class FirestoreService {
     // Create join request
     final requestId = 'join_${_uuid.v4()}';
     
-    // Get requester name for notification AND storage
-    // Robust name retrieval: Firestore -> Auth -> Fallback
+    // Get requester name and photo for notification AND storage
+    // Robust data retrieval: Firestore -> Auth -> Fallback
     String userName = 'Someone';
+    String? userPhoto;
     
     // 1. Try Firestore Profile
     final userDoc = await _db.collection('users').doc(userId).get();
@@ -113,17 +114,21 @@ class FirestoreService {
        } else if (data['email'] != null && data['email'].toString().isNotEmpty) {
          userName = data['email'];
        }
+       userPhoto = data['photoURL'];
     }
     
-    // 2. Fallback to Auth (if Firestore name is missing/generic)
-    if (userName == 'Someone' || userName.isEmpty) {
+    // 2. Fallback to Auth (if Firestore data is missing/generic)
+    if (userName == 'Someone' || userName.isEmpty || userPhoto == null) {
       final authUser = FirebaseAuth.instance.currentUser;
       if (authUser != null && authUser.uid == userId) {
-         if (authUser.displayName != null && authUser.displayName!.isNotEmpty) {
-            userName = authUser.displayName!;
-         } else if (authUser.email != null && authUser.email!.isNotEmpty) {
-            userName = authUser.email!;
+         if (userName == 'Someone' || userName.isEmpty) {
+            if (authUser.displayName != null && authUser.displayName!.isNotEmpty) {
+               userName = authUser.displayName!;
+            } else if (authUser.email != null && authUser.email!.isNotEmpty) {
+               userName = authUser.email!;
+            }
          }
+         userPhoto ??= authUser.photoURL;
       }
     }
     
@@ -131,6 +136,7 @@ class FirestoreService {
       'groupId': groupId,
       'requesterId': userId,
       'requesterName': userName,
+      'requesterPhotoUrl': userPhoto,
       'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
     });

@@ -7,6 +7,7 @@ class JoinRequest {
   final String groupId;
   final String requesterId;
   final String requesterName;
+  final String? requesterPhotoUrl;
   final String status; // 'pending', 'approved', 'rejected'
   final DateTime createdAt;
   final String? processedBy;
@@ -17,6 +18,7 @@ class JoinRequest {
     required this.groupId,
     required this.requesterId,
     required this.requesterName,
+    this.requesterPhotoUrl,
     required this.status,
     required this.createdAt,
     this.processedBy,
@@ -30,6 +32,7 @@ class JoinRequest {
       groupId: data['groupId'] ?? '',
       requesterId: data['requesterId'] ?? '',
       requesterName: data['requesterName'] ?? 'Unknown User',
+      requesterPhotoUrl: data['requesterPhotoUrl'],
       status: data['status'] ?? 'pending',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       processedBy: data['processedBy'],
@@ -42,6 +45,7 @@ class JoinRequest {
       'groupId': groupId,
       'requesterId': requesterId,
       'requesterName': requesterName,
+      'requesterPhotoUrl': requesterPhotoUrl,
       'status': status,
       'createdAt': Timestamp.fromDate(createdAt),
       'processedBy': processedBy,

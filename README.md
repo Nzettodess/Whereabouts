@@ -18,7 +18,14 @@ Orbit is a collaborative location and calendar coordination app for groups, buil
 
 ## 📝 Update Log
 
-### [1.0.1] - 2026-01-01
+### [1.0.1] - 2026-01-02
+
+- **🔒 Enhanced Security**: Tightened Firestore rules to ensure User Profiles and Group Lists are private and accessible only to relevant members.
+- **🛡️ Secure Join Flow**: Improved "Join Group" process to securely handle user identity without exposing public profile data.
+- **🚫 Owner Protection**: Enforced strict rules preventing Group Owners from leaving without first transferring ownership, ensuring groups never become orphaned.
+- **🐛 Access Fixes**: Resolved issues where valid group members could not see their own groups due to permission configurations.
+
+### [1.0.0] - 2026-01-01
 
 - **🚀 PWA Manual Install**: Added "Install App" button in drawer for Desktop (Chrome/Edge) and Mobile (Android/iOS).
 - **🎂 Birthday Reliability**: Implemented lifecycle-aware, group-wide birthday checks to ensure notifications never miss a beat.
