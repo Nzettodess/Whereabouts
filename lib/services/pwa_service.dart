@@ -52,4 +52,14 @@ class PWAService {
       debugPrint('Error triggering PWA install: $e');
     }
   }
+
+  /// Reload the current page (useful for PWA users to refresh content)
+  void reloadPage() {
+    if (!kIsWeb) return;
+    try {
+      js.context['location'].callMethod('reload');
+    } catch (e) {
+      debugPrint('Error reloading page: $e');
+    }
+  }
 }

@@ -1,9 +1,11 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart';
 import '../services/notification_service.dart';
+import '../services/pwa_service.dart';
 import '../models.dart';
 import '../notification_center.dart';
 import 'credits_feedback_dialog.dart';
@@ -85,6 +87,12 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
+        if (kIsWeb)
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.blueAccent),
+            tooltip: 'Refresh',
+            onPressed: () => PWAService().reloadPage(),
+          ),
         IconButton(
           icon: const Icon(Icons.event_note, color: Colors.deepPurple),
           tooltip: 'Upcoming',
