@@ -70,6 +70,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   ThemeMode _themeMode = ThemeMode.system;
+  double _textScaleFactor = 1.0; // Default text scale (1.0 = 100%)
   StreamSubscription? _userSubscription;
 
   @override
@@ -90,10 +91,12 @@ class _MyAppState extends State<MyApp> {
           if (snapshot.exists) {
             final data = snapshot.data();
             final mode = data?['themeMode'] as String?;
-            print('[Main] Received user update. ThemeMode: $mode');
+            final textScale = data?['textScaleFactor'] as double?;
+            print('[Main] Received user update. ThemeMode: $mode, TextScale: $textScale');
             
-            if (mode != null) {
-              setState(() {
+            setState(() {
+              // Update theme mode
+              if (mode != null) {
                 switch (mode) {
                   case 'light':
                     _themeMode = ThemeMode.light;
@@ -104,13 +107,19 @@ class _MyAppState extends State<MyApp> {
                   default:
                     _themeMode = ThemeMode.system;
                 }
-              });
-            }
+              }
+              
+              // Update text scale factor (clamped between 0.8 and 1.5)
+              if (textScale != null) {
+                _textScaleFactor = textScale.clamp(0.8, 1.5);
+              }
+            });
           }
         }, onError: (e) => print('[Main] Error listening to user: $e'));
       } else {
         setState(() {
           _themeMode = ThemeMode.system;
+          _textScaleFactor = 1.0;
         });
       }
     });
@@ -130,7 +139,17 @@ class _MyAppState extends State<MyApp> {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: _themeMode,
+      builder: (context, child) {
+        // Apply custom text scale factor for accessibility
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(_textScaleFactor),
+          ),
+          child: child!,
+        );
+      },
       home: const HomeWithLogin(),
     );
   }
 }
+

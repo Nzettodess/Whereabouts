@@ -52,9 +52,12 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     if (user == null) return const SizedBox.shrink();
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    
     return AppBar(
       backgroundColor: Colors.transparent, // Glassmorphism base
       elevation: 0,
+      titleSpacing: screenWidth < 400 ? 0 : NavigationToolbar.kMiddleSpacing,
       flexibleSpace: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
@@ -75,14 +78,17 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SvgPicture.asset("assets/orbit_logo.svg", height: 40),
-            const SizedBox(width: 8),
-            Text(
-              "Orbit",
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
+            if (screenWidth >= 335)
+              SvgPicture.asset("assets/orbit_logo.svg", height: 40),
+            if (screenWidth >= 375) ...[
+              const SizedBox(width: 8),
+              Text(
+                "Orbit",
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ],
           ],
         ),
       ),

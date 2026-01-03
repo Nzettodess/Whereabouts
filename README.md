@@ -18,8 +18,11 @@ Orbit is a collaborative location and calendar coordination app for groups, buil
 
 ## 📝 Update Log
 
-### [1.0.1] - 2026-01-02
+### [1.0.1] - 2026-01-03
 
+- **� Text Size Settings**: Added adjustable font size (80%-150%) in Settings for elderly users and accessibility.
+- **�🔄 Manual Refresh**: Added a refresh button in the navigation bar for quick page reloads, especially useful for PWA users.
+- **📱 iOS PWA Install**: The "Install App" button now always shows on iOS since Safari cannot reliably detect installation status.
 - **🔒 Enhanced Security**: Tightened Firestore rules to ensure User Profiles and Group Lists are private and accessible only to relevant members.
 - **🛡️ Secure Join Flow**: Improved "Join Group" process to securely handle user identity without exposing public profile data.
 - **🚫 Owner Protection**: Enforced strict rules preventing Group Owners from leaving without first transferring ownership, ensuring groups never become orphaned.

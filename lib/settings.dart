@@ -20,6 +20,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   List<String> _religiousCalendars = [];
   String _tileCalendarDisplay = 'none'; // none, chinese, islamic
   String _themeMode = 'system'; // system, light, dark
+  double _textScaleFactor = 1.0; // Text/font size scale (0.8 to 1.5)
   
   // Privacy settings - who can edit my data
   bool _blockAllAdminEdits = false;
@@ -135,6 +136,14 @@ class _SettingsDialogState extends State<SettingsDialog> {
           _themeMode = 'system';
         }
 
+        // Load text scale factor
+        final textScale = data?['textScaleFactor'];
+        if (textScale != null && textScale is num) {
+          _textScaleFactor = textScale.toDouble().clamp(0.8, 1.5);
+        } else {
+          _textScaleFactor = 1.0;
+        }
+
         // Load privacy settings
         final privacy = data?['privacySettings'] as Map<String, dynamic>?;
         if (privacy != null) {
@@ -159,6 +168,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
         'religiousCalendars': _religiousCalendars,
         'tileCalendarDisplay': _tileCalendarDisplay,
         'themeMode': _themeMode,
+        'textScaleFactor': _textScaleFactor,
         'privacySettings': {
           'blockDefaultLocation': _blockDefaultLocation,
           'blockLocationDate': _blockLocationDate,
@@ -434,6 +444,46 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         if (value != null) {
                           setState(() {
                             _tileCalendarDisplay = value;
+                          });
+                        }
+                      },
+                    ),
+
+                    SizedBox(height: isNarrow ? 16 : 20),
+
+                    // Text Size / Font Scale Setting (Accessibility)
+                    Text("Text Size (Accessibility)", style: sectionTitleStyle),
+                    SizedBox(height: isNarrow ? 4 : 5),
+                    Text("Adjust text size for easier reading:", style: bodyTextStyle),
+                    SizedBox(height: isNarrow ? 8 : 10),
+                    
+                    DropdownButtonFormField<double>(
+                      value: _textScaleFactor,
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        labelText: "Font Size",
+                        labelStyle: smallTextStyle,
+                        prefixIcon: Icon(Icons.text_fields, size: isNarrow ? 20 : 24),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: isNarrow ? 10 : 12,
+                          vertical: isNarrow ? 12 : 16,
+                        ),
+                      ),
+                      isExpanded: true,
+                      style: bodyTextStyle.copyWith(color: Theme.of(context).colorScheme.onSurface),
+                      items: [
+                        DropdownMenuItem(value: 0.8, child: Text('Small (80%)', style: bodyTextStyle)),
+                        DropdownMenuItem(value: 0.9, child: Text('Slightly Small (90%)', style: bodyTextStyle)),
+                        DropdownMenuItem(value: 1.0, child: Text('Default (100%)', style: bodyTextStyle)),
+                        DropdownMenuItem(value: 1.1, child: Text('Slightly Large (110%)', style: bodyTextStyle)),
+                        DropdownMenuItem(value: 1.2, child: Text('Large (120%)', style: bodyTextStyle)),
+                        DropdownMenuItem(value: 1.3, child: Text('Extra Large (130%)', style: bodyTextStyle)),
+                        DropdownMenuItem(value: 1.5, child: Text('Maximum (150%)', style: bodyTextStyle)),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() {
+                            _textScaleFactor = value;
                           });
                         }
                       },
