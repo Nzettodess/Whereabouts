@@ -91,8 +91,12 @@ class _MyAppState extends State<MyApp> {
           if (snapshot.exists) {
             final data = snapshot.data();
             final mode = data?['themeMode'] as String?;
-            final textScale = data?['textScaleFactor'] as double?;
+            // Handle textScaleFactor as num (could be int or double from Firestore)
+            final textScaleRaw = data?['textScaleFactor'];
+            final textScale = textScaleRaw is num ? textScaleRaw.toDouble() : null;
             print('[Main] Received user update. ThemeMode: $mode, TextScale: $textScale');
+            
+            if (!mounted) return;
             
             setState(() {
               // Update theme mode

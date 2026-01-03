@@ -225,11 +225,23 @@ class _EditMemberDialogState extends State<EditMemberDialog> {
                     if (widget.isPlaceholder) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: TextField(
+                        child: TextFormField(
                           controller: _nameController,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Display Name',
-                            icon: Icon(Icons.person, color: Colors.teal),
+                            icon: const Icon(Icons.person, color: Colors.teal),
+                            filled: true,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: Theme.of(context).brightness == Brightness.dark 
+                                    ? Colors.grey.shade600 
+                                    : Colors.grey.shade300,
+                              ),
+                            ),
                           ),
                           textCapitalization: TextCapitalization.words,
                         ),
@@ -282,10 +294,10 @@ class _EditMemberDialogState extends State<EditMemberDialog> {
                     ListTile(
                       leading: Icon(Icons.nightlight_round, 
                         color: _blockLunarBirthday ? Colors.grey : Colors.amber),
-                      title: Text('Lunar Birthday (农历生日)${_blockLunarBirthday ? " 🔒" : ""}'),
+                      title: Text('Lunar Birthday${_blockLunarBirthday ? " 🔒" : ""}'),
                       subtitle: Text(_hasLunarBirthday && _lunarBirthdayMonth != null
-                          ? LunarDatePickerDialog.formatLunarDate(_lunarBirthdayMonth!, _lunarBirthdayDay!)
-                          : 'Not set',
+                          ? '农历 ${LunarDatePickerDialog.formatLunarDate(_lunarBirthdayMonth!, _lunarBirthdayDay!)}'
+                          : '农历生日 - Not set',
                         style: TextStyle(color: _blockLunarBirthday ? Colors.grey : null)),
                       trailing: _blockLunarBirthday ? null : Row(
                         mainAxisSize: MainAxisSize.min,

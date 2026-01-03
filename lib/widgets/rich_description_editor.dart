@@ -206,6 +206,7 @@ class SimpleMarkdownField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -214,7 +215,17 @@ class SimpleMarkdownField extends StatelessWidget {
           decoration: InputDecoration(
             hintText: hintText,
             hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-            border: const OutlineInputBorder(),
+            filled: true,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.grey.shade400),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: isDark ? Colors.grey.shade600 : Colors.grey.shade300,
+              ),
+            ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
           minLines: minLines,

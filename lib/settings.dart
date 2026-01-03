@@ -364,8 +364,26 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     if (_holidayCountries.isEmpty)
                       DropdownButtonFormField<String>(
                         value: null,
+                        decoration: InputDecoration(
+                          border: const OutlineInputBorder(),
+                          labelText: "Add Additional Country",
+                          labelStyle: smallTextStyle,
+                          filled: true,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(
+                              color: Theme.of(context).brightness == Brightness.dark 
+                                  ? Colors.grey.shade600 
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: isNarrow ? 10 : 12,
+                            vertical: isNarrow ? 12 : 16,
+                          ),
+                        ),
                         hint: Text(
-                          isVeryNarrow ? "Add Country (Optional)" : "Add Additional Country (Optional)",
+                          isVeryNarrow ? "Add (Optional)" : "Add Additional Country (Optional)",
                           style: smallTextStyle,
                         ),
                         isExpanded: true,
@@ -393,6 +411,15 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         labelText: "App Theme",
                         labelStyle: smallTextStyle,
                         prefixIcon: Icon(Icons.brightness_6, size: isNarrow ? 20 : 24),
+                        filled: true,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).brightness == Brightness.dark 
+                                ? Colors.grey.shade600 
+                                : Colors.grey.shade300,
+                          ),
+                        ),
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: isNarrow ? 10 : 12,
                           vertical: isNarrow ? 12 : 16,
@@ -428,6 +455,15 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         border: const OutlineInputBorder(),
                         labelText: "Tile Calendar Display",
                         labelStyle: smallTextStyle,
+                        filled: true,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).brightness == Brightness.dark 
+                                ? Colors.grey.shade600 
+                                : Colors.grey.shade300,
+                          ),
+                        ),
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: isNarrow ? 10 : 12,
                           vertical: isNarrow ? 12 : 16,
@@ -452,7 +488,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     SizedBox(height: isNarrow ? 16 : 20),
 
                     // Text Size / Font Scale Setting (Accessibility)
-                    Text("Text Size (Accessibility)", style: sectionTitleStyle),
+                    Text("Text Size", style: sectionTitleStyle),
                     SizedBox(height: isNarrow ? 4 : 5),
                     Text("Adjust text size for easier reading:", style: bodyTextStyle),
                     SizedBox(height: isNarrow ? 8 : 10),
@@ -464,6 +500,15 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         labelText: "Font Size",
                         labelStyle: smallTextStyle,
                         prefixIcon: Icon(Icons.text_fields, size: isNarrow ? 20 : 24),
+                        filled: true,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: Theme.of(context).brightness == Brightness.dark 
+                                ? Colors.grey.shade600 
+                                : Colors.grey.shade300,
+                          ),
+                        ),
                         contentPadding: EdgeInsets.symmetric(
                           horizontal: isNarrow ? 10 : 12,
                           vertical: isNarrow ? 12 : 16,
@@ -492,7 +537,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     SizedBox(height: isNarrow ? 16 : 20),
                     
                     // Religious Calendars for Public Holidays
-                    Text("Religious Public Holidays (API)", style: sectionTitleStyle),
+                    Text("Religious Public Holidays", style: sectionTitleStyle),
                     SizedBox(height: isNarrow ? 4 : 5),
                     Text("Select religious calendars to fetch public holidays (Ramadan, Eid, Chinese New Year, etc.):", style: bodyTextStyle),
                     SizedBox(height: isNarrow ? 8 : 10),

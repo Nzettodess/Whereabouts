@@ -119,15 +119,12 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
     final isNarrow = screenWidth < 450;
     final isVeryNarrow = screenWidth < 400;
     
-    // Use 95% of screen width on mobile, capped at 500 for larger screens
-    final dialogWidth = screenWidth < 550 ? screenWidth * 0.95 : 500.0;
+    // Use 90% of screen width on mobile, capped at 500 for larger screens
+    final dialogWidth = isNarrow ? screenWidth * 0.90 : 500.0;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: isVeryNarrow ? 8 : (isNarrow ? 12 : 24),
-        vertical: 24,
-      ),
+      insetPadding: isNarrow ? const EdgeInsets.symmetric(horizontal: 10, vertical: 24) : null,
       child: Container(
         width: dialogWidth,
         constraints: BoxConstraints(
@@ -234,6 +231,7 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
                           if (_daysToShow < _maxDays)
                             Builder(builder: (context) {
                               final screenWidth = MediaQuery.of(context).size.width;
+                              final isNarrow = screenWidth < 450;
                               final isVeryNarrow = screenWidth < 390;
                               return Padding(
                                 padding: EdgeInsets.symmetric(
@@ -251,7 +249,7 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
                                     },
                                     icon: Icon(Icons.expand_more, size: isVeryNarrow ? 16 : 20),
                                     label: Text(
-                                      isVeryNarrow 
+                                      isNarrow 
                                         ? 'More ($_daysToShow/$_maxDays)'
                                         : 'Load more (showing $_daysToShow of $_maxDays days)',
                                       style: TextStyle(fontSize: isVeryNarrow ? 11 : 14),

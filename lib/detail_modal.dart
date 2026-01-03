@@ -1074,21 +1074,18 @@ class _DetailModalState extends State<DetailModal> {
         lunarBirthdayDay: userData?['lunarBirthdayDay'],
         onEdit: () {
           if (!_checkCanWrite()) return;
-          if (isPlaceholder) {
-            _editPlaceholderLocation(location);
-          } else {
-             showDialog(
-               context: context,
-               builder: (_) => EditMemberDialog(
-                 memberId: location.userId,
-                 memberDetails: userData ?? {},
-                 groupId: location.groupId,
-                 onSaved: () {
-                   _loadUserDetails(); // Refresh data
-                 },
-               ),
-             );
-          }
+          showDialog(
+            context: context,
+            builder: (_) => EditMemberDialog(
+              memberId: location.userId,
+              memberDetails: userData ?? {},
+              groupId: location.groupId,
+              isPlaceholder: isPlaceholder, // Pass isPlaceholder flag
+              onSaved: () {
+                _loadUserDetails(); // Refresh data
+              },
+            ),
+          );
         },
       ),
     );

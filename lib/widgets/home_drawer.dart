@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'credits_feedback_dialog.dart';
 import '../services/services.dart';
+import '../core/theme/app_colors.dart';
 
+/// iOS-style navigation drawer with grouped sections
 class HomeDrawer extends StatelessWidget {
   final User? user;
   final String? displayName;
@@ -29,145 +31,334 @@ class HomeDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = isDark ? AppColors.darkBackground : AppColors.lightBackground;
+    final surfaceColor = isDark ? AppColors.darkSurface : AppColors.lightSurface;
+    
     return Drawer(
-      child: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                DrawerHeader(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF673AB7), // Deep Purple
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.pop(context); // Close drawer
-                          onProfileTap();
-                        },
-                        child: CircleAvatar(
-                          radius: 30,
-                          backgroundColor: Colors.white,
-                          child: ClipOval(
-                            child: Image.network(
-                              photoUrl ?? user?.photoURL ?? "https://ui-avatars.com/api/?name=${Uri.encodeComponent(displayName ?? user?.displayName ?? 'User')}",
-                              width: 60,
-                              height: 60,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Image.network(
-                                  "https://ui-avatars.com/api/?name=${Uri.encodeComponent(displayName ?? user?.displayName ?? 'User')}",
-                                  width: 60,
-                                  height: 60,
-                                  fit: BoxFit.cover,
-                                );
-                              },
-                            ),
-                          ),
+      backgroundColor: backgroundColor,
+      child: SafeArea(
+        child: Column(
+          children: [
+            // Profile Header
+            _buildProfileHeader(context, isDark, surfaceColor),
+            
+            const SizedBox(height: 16),
+            
+            // Scrollable menu items
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Main Navigation Section
+                    _buildSectionHeader(context, 'NAVIGATION'),
+                    const SizedBox(height: 8),
+                    _buildGroupedSection(
+                      context,
+                      surfaceColor,
+                      [
+                        _buildMenuItem(
+                          context: context,
+                          icon: Icons.group_rounded,
+                          iconColor: AppColors.iosPurple,
+                          title: 'Groups',
+                          onTap: () {
+                            Navigator.pop(context);
+                            onManageGroupsTap();
+                          },
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        displayName ?? user?.displayName ?? user?.email ?? "User",
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.group, color: Colors.deepPurpleAccent),
-                  title: const Text("Groups"),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onManageGroupsTap();
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.event_note, color: Colors.orangeAccent),
-                  title: const Text("Upcoming"),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onUpcomingTap();
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.cake, color: Colors.pinkAccent),
-                  title: const Text("Birthday Baby"),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onBirthdayBabyTap();
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.event_available, color: Colors.tealAccent),
-                  title: const Text("RSVP"),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onRSVPManagementTap();
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.settings, color: Colors.blueGrey),
-                  title: const Text("Settings"),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onSettingsTap();
-                  },
-                ),
-              ],
-            ),
-          ),
-          // Bottom section with divider and feedback button
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.feedback_outlined, color: Colors.deepPurple),
-            title: const Text("About & Feedback"),
-            onTap: () {
-              Navigator.pop(context); // Close drawer
-              showDialog(
-                context: context,
-                builder: (context) => const CreditsAndFeedbackDialog(),
-              );
-            },
-          ),
-          if (PWAService().shouldShowInstallButton())
-            ListTile(
-              leading: const Icon(Icons.install_mobile, color: Colors.green),
-              title: const Text("Install App"),
-              onTap: () {
-                Navigator.pop(context);
-                final result = PWAService().triggerInstall();
-                if (result == 'installed') {
-                  // Show dialog informing user app is already installed
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Row(
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.green),
-                          SizedBox(width: 8),
-                          Text("Already Installed"),
-                        ],
-                      ),
-                      content: const Text(
-                        "Orbit is already installed on your device! You're using it right now.",
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text("OK"),
+                        _buildDivider(context),
+                        _buildMenuItem(
+                          context: context,
+                          icon: Icons.event_note_rounded,
+                          iconColor: AppColors.iosOrange,
+                          title: 'Upcoming',
+                          onTap: () {
+                            Navigator.pop(context);
+                            onUpcomingTap();
+                          },
+                        ),
+                        _buildDivider(context),
+                        _buildMenuItem(
+                          context: context,
+                          icon: Icons.cake_rounded,
+                          iconColor: AppColors.iosPink,
+                          title: 'Birthday Baby',
+                          onTap: () {
+                            Navigator.pop(context);
+                            onBirthdayBabyTap();
+                          },
+                        ),
+                        _buildDivider(context),
+                        _buildMenuItem(
+                          context: context,
+                          icon: Icons.event_available_rounded,
+                          iconColor: AppColors.iosTeal,
+                          title: 'RSVP',
+                          onTap: () {
+                            Navigator.pop(context);
+                            onRSVPManagementTap();
+                          },
                         ),
                       ],
                     ),
-                  );
-                }
-              },
+                    
+                    const SizedBox(height: 24),
+                    
+                    // Settings Section
+                    _buildSectionHeader(context, 'PREFERENCES'),
+                    const SizedBox(height: 8),
+                    _buildGroupedSection(
+                      context,
+                      surfaceColor,
+                      [
+                        _buildMenuItem(
+                          context: context,
+                          icon: Icons.settings_rounded,
+                          iconColor: AppColors.iosGray,
+                          title: 'Settings',
+                          onTap: () {
+                            Navigator.pop(context);
+                            onSettingsTap();
+                          },
+                        ),
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 24),
+                    
+                    // About Section
+                    _buildSectionHeader(context, 'ABOUT'),
+                    const SizedBox(height: 8),
+                    _buildGroupedSection(
+                      context,
+                      surfaceColor,
+                      [
+                        _buildMenuItem(
+                          context: context,
+                          icon: Icons.info_outline_rounded,
+                          iconColor: AppColors.iosBlue,
+                          title: 'About & Feedback',
+                          onTap: () {
+                            Navigator.pop(context);
+                            showDialog(
+                              context: context,
+                              builder: (context) => const CreditsAndFeedbackDialog(),
+                            );
+                          },
+                        ),
+                        if (PWAService().shouldShowInstallButton()) ...[
+                          _buildDivider(context),
+                          _buildMenuItem(
+                            context: context,
+                            icon: Icons.install_mobile_rounded,
+                            iconColor: AppColors.iosGreen,
+                            title: 'Install App',
+                            onTap: () {
+                              Navigator.pop(context);
+                              PWAService().triggerInstall();
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
             ),
-          const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Profile header with avatar and name
+  Widget _buildProfileHeader(BuildContext context, bool isDark, Color surfaceColor) {
+    final headerBgColor = isDark ? AppColors.iosPurple.withOpacity(0.3) : AppColors.iosPurple;
+    
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark 
+              ? [AppColors.iosPurple.withOpacity(0.4), AppColors.iosPurple.withOpacity(0.2)]
+              : [AppColors.iosPurple, AppColors.iosPurple.withOpacity(0.85)],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: () {
+              Navigator.pop(context);
+              onProfileTap();
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: CircleAvatar(
+                radius: 32,
+                backgroundColor: Colors.white,
+                child: ClipOval(
+                  child: Image.network(
+                    photoUrl ?? user?.photoURL ?? "https://ui-avatars.com/api/?name=${Uri.encodeComponent(displayName ?? user?.displayName ?? 'User')}",
+                    width: 64,
+                    height: 64,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Image.network(
+                        "https://ui-avatars.com/api/?name=${Uri.encodeComponent(displayName ?? user?.displayName ?? 'User')}",
+                        width: 64,
+                        height: 64,
+                        fit: BoxFit.cover,
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            displayName ?? user?.displayName ?? user?.email ?? "User",
+            style: const TextStyle(
+              color: Colors.white, 
+              fontSize: 18, 
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
+            ),
+          ),
+          if (user?.email != null && user?.email != displayName)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                user!.email!,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.75), 
+                  fontSize: 13,
+                ),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+
+  /// iOS-style section header
+  Widget _buildSectionHeader(BuildContext context, String title) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(left: 16),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.5,
+          color: isDark ? AppColors.iosGray : AppColors.lightSecondary,
+        ),
+      ),
+    );
+  }
+
+  /// Grouped section container with rounded corners
+  Widget _buildGroupedSection(BuildContext context, Color surfaceColor, List<Widget> children) {
+    return Container(
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: Theme.of(context).brightness == Brightness.light
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: children,
+        ),
+      ),
+    );
+  }
+
+  /// Individual menu item
+  Widget _buildMenuItem({
+    required BuildContext context,
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Icon(icon, size: 18, color: iconColor),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: AppColors.iosGray.withOpacity(0.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Subtle divider between menu items
+  Widget _buildDivider(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 60),
+      child: Divider(
+        height: 0.5,
+        thickness: 0.5,
+        color: AppColors.getDivider(context),
       ),
     );
   }

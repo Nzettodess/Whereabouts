@@ -160,77 +160,98 @@ class _ProfileDialogState extends State<ProfileDialog> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                TextField(
-                  controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: "Display Name",
-                    border: OutlineInputBorder(),
-                    helperText: "Use Reset to restore Google name",
+                // Display Name Section with grey container
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppColors.darkElevated
+                        : AppColors.iosGray6,
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Builder(
-                        builder: (context) {
-                          final isNarrow = MediaQuery.of(context).size.width < 400;
-                          final isExtraNarrow = MediaQuery.of(context).size.width < 320;
-                          return ElevatedButton(
-                            onPressed: () async {
-                              await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
-                                'displayName': _nameController.text,
-                              });
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("Display name updated"))
-                                );
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.getButtonBackground(context),
-                              foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                              padding: isNarrow ? const EdgeInsets.symmetric(horizontal: 4) : null,
-                            ),
-                            child: Text(
-                              "Update Name",
-                              style: TextStyle(
-                                // Tighten spacing on very narrow screens to prevent overflow
-                                letterSpacing: isExtraNarrow ? -0.8 : null,
-                                wordSpacing: isExtraNarrow ? -2.0 : null,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          labelText: "Display Name",
+                          filled: true,
+                          fillColor: Theme.of(context).brightness == Brightness.dark
+                              ? AppColors.darkSurface
+                              : Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide.none,
+                          ),
+                          helperText: "Use Reset to restore Google name",
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
+                                  'displayName': _nameController.text,
+                                });
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Display name updated"))
+                                  );
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.getButtonBackground(context),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  "Update Name",
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
                               ),
                             ),
-                          );
-                        },
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 2,
+                            child: OutlinedButton(
+                              onPressed: () async {
+                                final googleName = widget.user.displayName;
+                                if (googleName != null) {
+                                  setState(() {
+                                    _nameController.text = googleName;
+                                  });
+                                  await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
+                                    'displayName': googleName,
+                                  });
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text("Reset to Google name"))
+                                    );
+                                  }
+                                }
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Theme.of(context).colorScheme.onSurface,
+                                side: BorderSide(color: Theme.of(context).colorScheme.outline),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text("Reset"),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () async {
-                          final googleName = widget.user.displayName;
-                          if (googleName != null) {
-                            setState(() {
-                              _nameController.text = googleName;
-                            });
-                            await FirebaseFirestore.instance.collection('users').doc(widget.user.uid).update({
-                              'displayName': googleName,
-                            });
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Reset to Google name"))
-                              );
-                            }
-                          }
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Theme.of(context).colorScheme.onSurface,
-                          side: BorderSide(color: Theme.of(context).colorScheme.outline),
-                        ),
-                        child: const Text("Reset"),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const Divider(height: 12),
                 const Text("Default Location", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),

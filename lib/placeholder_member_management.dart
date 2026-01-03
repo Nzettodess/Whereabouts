@@ -38,20 +38,20 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isNarrow = screenWidth < 400;
+    final size = MediaQuery.sizeOf(context);
+    final screenWidth = size.width;
+    final isNarrow = screenWidth < 450;
+    final isVeryNarrow = screenWidth < 380;
     
+    final dialogWidth = isNarrow ? screenWidth * 0.90 : 500.0;
     return Dialog(
+      insetPadding: isNarrow ? const EdgeInsets.symmetric(horizontal: 8, vertical: 24) : null,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(isNarrow ? 12 : 20)),
       child: Container(
-        padding: EdgeInsets.all(isNarrow ? 12 : 20),
-        constraints: BoxConstraints(
-          maxWidth: 600,
-          maxHeight: MediaQuery.of(context).size.height * 0.9,
-          minWidth: 0,
-        ),
-        width: MediaQuery.of(context).size.width * 0.9,
+        padding: EdgeInsets.all(isVeryNarrow ? 8 : (isNarrow ? 12 : 16)),
+        width: dialogWidth,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             // Header - compact on mobile
             Row(
@@ -86,42 +86,59 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
             _buildPendingRequestsSection(),
             
             // Placeholder Members List
-            Expanded(
+            Flexible(
               child: StreamBuilder<List<PlaceholderMember>>(
                 stream: _firestoreService.getGroupPlaceholderMembers(widget.group.id),
                 builder: (context, snapshot) {
                   // Show skeleton - DISABLED per user request
                   if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
+                    return SizedBox(
+                      height: 100, // Explicit short height while loading
+                      child: Center(
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    );
                   }
                   
                   final placeholders = snapshot.data ?? [];
                   
                   if (placeholders.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.person_add_disabled, size: isNarrow ? 48 : 64, color: Colors.grey[400]),
-                          SizedBox(height: isNarrow ? 12 : 16),
-                          Text(
-                            "No placeholder members yet",
-                            style: TextStyle(color: Colors.grey[600], fontSize: isNarrow ? 13 : 14),
-                          ),
-                          if (canCreate) ...[
-                            const SizedBox(height: 8),
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.person_add_disabled, size: isNarrow ? 48 : 64, color: Colors.grey[400]),
+                            SizedBox(height: isNarrow ? 12 : 16),
                             Text(
-                              "Create one to represent a member who hasn't joined",
-                              style: TextStyle(fontSize: isNarrow ? 11 : 12, color: Colors.grey),
-                              textAlign: TextAlign.center,
+                              "No placeholder members yet",
+                              style: TextStyle(color: Colors.grey[600], fontSize: isNarrow ? 13 : 14),
                             ),
+                            if (canCreate) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                "Create one to represent a member who hasn't joined",
+                                style: TextStyle(fontSize: isNarrow ? 11 : 12, color: Colors.grey),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     );
                   }
                   
                   return ListView.builder(
+                    shrinkWrap: true,
                     itemCount: placeholders.length,
                     itemBuilder: (context, index) {
                       final placeholder = placeholders[index];
@@ -198,7 +215,9 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
         ),
         title: Text(
           placeholder.displayName, 
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         subtitle: (placeholder.defaultLocation == null && placeholder.birthday == null && !placeholder.hasLunarBirthday) 
             ? null 
@@ -227,26 +246,32 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
             // Edit button
             if (canEdit)
               IconButton(
-                icon: const Icon(Icons.edit, size: 20),
+                icon: const Icon(Icons.edit, size: 18),
                 onPressed: () => _showEditDialog(placeholder),
                 tooltip: 'Edit',
                 color: Colors.blueGrey,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
               ),
             // Delete button
             if (canDelete)
               IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20),
+                icon: const Icon(Icons.delete_outline, size: 18),
                 onPressed: () => _confirmDelete(placeholder),
                 tooltip: 'Delete',
                 color: Colors.red,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
               ),
             // Request Inheritance button
             if (!isOwner)
               IconButton(
-                icon: const Icon(Icons.download, size: 20),
+                icon: const Icon(Icons.download, size: 18),
                 onPressed: () => _requestInheritance(placeholder),
                 tooltip: 'Request to Inherit',
                 color: Colors.blue,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
               ),
           ],
         ),
@@ -439,11 +464,23 @@ class _PlaceholderMemberManagementState extends State<PlaceholderMemberManagemen
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
+                TextFormField(
                   controller: nameController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: "Display Name *",
                     hintText: "e.g., Dad, Mom, Grandpa",
+                    filled: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: Theme.of(context).brightness == Brightness.dark 
+                            ? Colors.grey.shade600 
+                            : Colors.grey.shade300,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),

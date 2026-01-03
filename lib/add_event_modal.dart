@@ -202,22 +202,50 @@ class _AddEventModalState extends State<AddEventModal> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _titleController,
-                decoration: const InputDecoration(labelText: "Event Title"),
+                decoration: InputDecoration(
+                  labelText: "Event Title",
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: Colors.grey.shade400),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).brightness == Brightness.dark 
+                          ? Colors.grey.shade600 
+                          : Colors.grey.shade300,
+                    ),
+                  ),
+                ),
                 validator: (value) => value!.isEmpty ? "Required" : null,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               SimpleMarkdownField(
                 controller: _descController,
                 hintText: 'Add description (supports **bold**, *italic*, [links](url))',
                 minLines: 2,
                 maxLines: 5,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _venueController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: "Venue (Optional)",
                   hintText: "Enter event location",
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: Colors.grey.shade400),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).brightness == Brightness.dark 
+                          ? Colors.grey.shade600 
+                          : Colors.grey.shade300,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -253,7 +281,22 @@ class _AddEventModalState extends State<AddEventModal> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 value: _selectedGroupId,
-                decoration: const InputDecoration(labelText: "Group"),
+                decoration: InputDecoration(
+                  labelText: "Group",
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: Colors.grey.shade400),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).brightness == Brightness.dark 
+                          ? Colors.grey.shade600 
+                          : Colors.grey.shade300,
+                    ),
+                  ),
+                ),
                 items: _userGroups.map((g) => DropdownMenuItem(
                   value: g.id,
                   child: Text(g.name),

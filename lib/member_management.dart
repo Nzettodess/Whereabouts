@@ -566,22 +566,21 @@ class _MemberManagementState extends State<MemberManagement> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
+    final size = MediaQuery.sizeOf(context);
+    final screenWidth = size.width;
     final isNarrow = screenWidth < 450;
     final isVeryNarrow = screenWidth < 380;
     
-    // Use 95% of screen width on mobile, capped at 500 for larger screens
-    final dialogWidth = screenWidth < 550 ? screenWidth * 0.95 : 500.0;
+    // Use 90% of screen width on mobile, capped at 500 for larger screens
+    final dialogWidth = isNarrow ? screenWidth * 0.90 : 500.0;
 
     return Dialog(
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: isVeryNarrow ? 8 : (isNarrow ? 12 : 24),
-        vertical: 24,
-      ),
+      insetPadding: isNarrow ? const EdgeInsets.symmetric(horizontal: 8, vertical: 24) : null,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
+        padding: const EdgeInsets.all(16),
         width: dialogWidth,
         constraints: const BoxConstraints(maxHeight: 600),
-        padding: EdgeInsets.all(isVeryNarrow ? 8 : (isNarrow ? 12 : 16)),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -671,11 +670,12 @@ class _MemberManagementState extends State<MemberManagement> {
               ),
 
             
-            Expanded(
+            Flexible(
               child: Builder(
                 builder: (context) {
                   final sortedMembers = _getSortedMembers();
                   return ListView.builder(
+                    shrinkWrap: true,
                     itemCount: sortedMembers.length,
                     itemBuilder: (context, index) {
                       final memberId = sortedMembers[index];

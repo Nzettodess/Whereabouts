@@ -315,21 +315,19 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
   Widget build(BuildContext context) {
     if (_user == null) return const SizedBox.shrink();
 
-    final screenWidth = MediaQuery.of(context).size.width;
+    final size = MediaQuery.sizeOf(context);
+    final screenWidth = size.width;
     final isNarrow = screenWidth < 450;
     final isVeryNarrow = screenWidth < 380;
     
     // Use 95% of screen width on mobile, capped at 400 for larger screens
-    final dialogWidth = screenWidth < 450 ? screenWidth * 0.95 : 400.0;
+    final dialogWidth = isNarrow ? screenWidth * 0.90 : 500.0;
 
     return Dialog(
+      insetPadding: isNarrow ? const EdgeInsets.symmetric(horizontal: 10, vertical: 24) : null,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: isVeryNarrow ? 8 : (isNarrow ? 12 : 24),
-        vertical: 24,
-      ),
       child: Container(
-        padding: EdgeInsets.zero, // Remove global padding
+        padding: const EdgeInsets.all(16),
         width: dialogWidth,
         height: 500,
         child: Column(
@@ -368,94 +366,153 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
 
                   final groups = snapshot.data!;
                   return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 0), 
+                    padding: const EdgeInsets.symmetric(horizontal: 0),
                     itemCount: groups.length,
                     itemBuilder: (context, index) {
                       final group = groups[index];
-                      return ListTile(
-                        title: Text(group.name),
-                        subtitle: Row(
+                      final size = MediaQuery.sizeOf(context);
+                      final screenWidth = size.width;
+                      final isNarrow = screenWidth < 500;
+                      final isExtraNarrow = screenWidth < 360;
+                      final isSuperNarrow = screenWidth < 380;
+                      final iconSpacing = isExtraNarrow ? 0.0 : (isSuperNarrow ? 2.0 : 4.0);
+                      
+                      final isAdminOrOwner = group.ownerId == _user!.uid || 
+                                             group.admins.contains(_user!.uid);
+
+                      // --- Action Widgets (Pre-defined for reuse) ---
+                      
+                      // View/Management Actions
+                      Widget buildManagementActions() {
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text('ID: ${group.id}', overflow: TextOverflow.ellipsis),
-                                  ),
-                                  // Edit Button for Admins/Owners
-                                  if (group.ownerId == _user!.uid || group.admins.contains(_user!.uid))
-                                    IconButton(
-                                      icon: const Icon(Icons.edit, size: 20, color: Colors.blueGrey),
-                                      tooltip: 'Rename Group',
-                                      onPressed: () => _renameGroup(group),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-                                    ),
-                                ],
+                            // 1. Placeholder members button
+                            SizedBox(
+                              width: 36,
+                              child: StreamBuilder<List<InheritanceRequest>>(
+                                stream: _firestoreService.getPendingInheritanceRequests(group.id),
+                                builder: (context, inheritSnapshot) {
+                                  final inheritPendingCount = inheritSnapshot.data?.length ?? 0;
+                                  return Stack(
+                                    alignment: Alignment.center,
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.person_outline, color: Colors.blue, size: 24),
+                                        onPressed: () => showDialog(
+                                          context: context,
+                                          builder: (_) => PlaceholderMemberManagement(
+                                            group: group,
+                                            currentUserId: _user!.uid,
+                                          ),
+                                        ),
+                                        tooltip: 'Placeholder Members',
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                      ),
+                                      if (isAdminOrOwner && inheritPendingCount > 0)
+                                        Positioned(
+                                          right: -2, top: -2,
+                                          child: IgnorePointer(
+                                            child: Container(
+                                              padding: const EdgeInsets.all(2),
+                                              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                              constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
+                                              child: Text('$inheritPendingCount', style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.copy, size: 20),
-                              onPressed: () {
-                                Clipboard.setData(ClipboardData(text: group.id));
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: const Text("Copied!"),
-                                    content: const Text("Group ID copied to clipboard."),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(context),
-                                        child: const Text("OK"),
+                            // 2. Members button
+                            SizedBox(
+                              width: 36,
+                              child: StreamBuilder<List<JoinRequest>>(
+                                stream: _firestoreService.getPendingJoinRequests(group.id),
+                                builder: (context, requestSnapshot) {
+                                  final pendingCount = requestSnapshot.data?.length ?? 0;
+                                  return Stack(
+                                    alignment: Alignment.center,
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.group, color: Colors.green, size: 22),
+                                        onPressed: () => showDialog(
+                                          context: context,
+                                          builder: (_) => MemberManagement(
+                                            group: group,
+                                            currentUserId: _user!.uid,
+                                          ),
+                                        ),
+                                        tooltip: 'Members',
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                       ),
+                                      if (isAdminOrOwner && pendingCount > 0)
+                                        Positioned(
+                                          right: -2, top: -2,
+                                          child: IgnorePointer(
+                                            child: Container(
+                                              padding: const EdgeInsets.all(2),
+                                              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                              constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
+                                              child: Text('$pendingCount', style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                                            ),
+                                          ),
+                                        ),
                                     ],
-                                  ),
-                                );
-                              },
-                              tooltip: 'Copy Group ID',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                  );
+                                },
+                              ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.share, size: 20, color: Colors.blue),
-                              onPressed: () {
-                                String baseUrl = 'https://orbit-wheat-sigma.vercel.app/'; // Fallback
-                                try {
-                                  final origin = js.context['location']['origin'];
-                                  if (origin != null) baseUrl = origin;
-                                } catch (e) {
-                                  debugPrint('Error getting origin: $e');
-                                }
+                            // 3. Leave Button
+                            SizedBox(
+                              width: 36,
+                              child: IconButton(
+                                icon: const Icon(Icons.exit_to_app, color: Colors.red, size: 22),
+                                onPressed: () => _leaveGroup(group),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
 
-                                final joinLink = 'Click this link to join our group on Orbit: $baseUrl/?join=${group.id}';
-                                
-                                // Try native web share first (mobile)
-                                bool shareSuccess = false;
-                                try {
-                                  if (js.context.hasProperty('navigator') && 
-                                      js.context['navigator'].hasProperty('share')) {
-                                    js.context['navigator'].callMethod('share', [
-                                      js.JsObject.jsify({
-                                        'title': 'Join my Orbit Group',
-                                        'text': 'Come join my group on Orbit!', // Removed manual link concatenation
-                                        'url': '$baseUrl/?join=${group.id}',
-                                      })
-                                    ]);
-                                    shareSuccess = true;
-                                  }
-                                } catch (e) {
-                                  debugPrint('Web Share API failed, falling back to clipboard: $e');
-                                }
-
-                                // Fallback to clipboard if native share not available or failed
-                                if (!shareSuccess) {
-                                  Clipboard.setData(ClipboardData(text: joinLink));
-
+                      // Meta/Group Actions
+                      Widget buildMetaActions() {
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 36,
+                              child: isAdminOrOwner ? IconButton(
+                                icon: const Icon(Icons.edit, size: 18, color: Colors.blueGrey),
+                                tooltip: 'Rename Group',
+                                onPressed: () => _renameGroup(group),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              ) : const SizedBox.shrink(),
+                            ),
+                            SizedBox(
+                              width: 36,
+                              child: IconButton(
+                                icon: const Icon(Icons.copy, size: 18),
+                                onPressed: () {
+                                  Clipboard.setData(ClipboardData(text: group.id));
                                   showDialog(
                                     context: context,
                                     builder: (context) => AlertDialog(
-                                      title: const Text("Link Copied!"),
-                                      content: const Text("Join link copied to clipboard.\n\nShare it with your friends!"),
+                                      title: const Text("Copied!"),
+                                      content: const Text("Group ID copied to clipboard."),
                                       actions: [
                                         TextButton(
                                           onPressed: () => Navigator.pop(context),
@@ -464,139 +521,114 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                                       ],
                                     ),
                                   );
-                                }
-                              },
-                              tooltip: 'Copy Join Link',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                                },
+                                tooltip: 'Copy Group ID',
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 36,
+                              child: IconButton(
+                                icon: const Icon(Icons.share, size: 18, color: Colors.blue),
+                                onPressed: () {
+                                  String baseUrl = 'https://orbit-wheat-sigma.vercel.app/';
+                                  try {
+                                    final origin = js.context['location']['origin'];
+                                    if (origin != null) baseUrl = origin;
+                                  } catch (e) {}
+                                  final joinLink = '$baseUrl/?join=${group.id}';
+                                  bool shareSuccess = false;
+                                  try {
+                                    if (js.context.hasProperty('navigator') && js.context['navigator'].hasProperty('share')) {
+                                      js.context['navigator'].callMethod('share', [
+                                        js.JsObject.jsify({'title': 'Join my Orbit Group', 'text': 'Join my group on Orbit!', 'url': joinLink})
+                                      ]);
+                                      shareSuccess = true;
+                                    }
+                                  } catch (e) {}
+                                  if (!shareSuccess) {
+                                    Clipboard.setData(ClipboardData(text: joinLink));
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text("Link Copied!"),
+                                        content: const Text("Join link copied to clipboard.\n\nShare it with your friends!"),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(context),
+                                            child: const Text("OK"),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+                                },
+                                tooltip: 'Copy Join Link',
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                              ),
                             ),
                           ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Placeholder members button with inheritance request badge
-                            StreamBuilder<List<InheritanceRequest>>(
-                              stream: _firestoreService.getPendingInheritanceRequests(group.id),
-                              builder: (context, inheritSnapshot) {
-                                final inheritPendingCount = inheritSnapshot.data?.length ?? 0;
-                                final isAdminOrOwner = group.ownerId == _user!.uid || 
-                                                       group.admins.contains(_user!.uid);
-                                
-                                return Stack(
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.person_outline, color: Colors.blue, size: 26),
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) => PlaceholderMemberManagement(
-                                            group: group,
-                                            currentUserId: _user!.uid,
-                                          ),
-                                        );
-                                      },
-                                      tooltip: 'Placeholder Members',
-                                      visualDensity: VisualDensity.compact,
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(minWidth: 36, minHeight: 34),
+                        );
+                      }
+
+                      if (isNarrow) {
+                        // NARROW (MOBILE) LAYOUT: Two rows to prevent wrapping
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Row 1: Name + Meta Actions (Edit, Copy, Share) - SWAPPED TOP
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      group.name,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    // Show badge if admin/owner and there are pending inheritance requests
-                                    if (isAdminOrOwner && inheritPendingCount > 0)
-                                      Positioned(
-                                        right: 2,
-                                        top: 2,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(3),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.red,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          constraints: const BoxConstraints(
-                                            minWidth: 14,
-                                            minHeight: 14,
-                                          ),
-                                          child: Text(
-                                            '$inheritPendingCount',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-                            // Members button with pending request badge
-                            StreamBuilder<List<JoinRequest>>(
-                              stream: _firestoreService.getPendingJoinRequests(group.id),
-                              builder: (context, requestSnapshot) {
-                                final pendingCount = requestSnapshot.data?.length ?? 0;
-                                final isAdminOrOwner = group.ownerId == _user!.uid || 
-                                                       group.admins.contains(_user!.uid);
-                                
-                                return Stack(
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.group, color: Colors.green, size: 24),
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (_) => MemberManagement(
-                                            group: group,
-                                            currentUserId: _user!.uid,
-                                          ),
-                                        );
-                                      },
-                                      tooltip: 'Members',
-                                      visualDensity: VisualDensity.compact,
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                                  ),
+                                  // Right-aligned Meta Actions
+                                  buildMetaActions(),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              // Row 2: ID + Management Actions (Placeholder, Members, Leave) - SWAPPED BOTTOM
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'ID: ${group.id}',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    // Show badge if admin/owner and there are pending requests
-                                    if (isAdminOrOwner && pendingCount > 0)
-                                      Positioned(
-                                        right: 2,
-                                        top: 2,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(3),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.red,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          constraints: const BoxConstraints(
-                                            minWidth: 14,
-                                            minHeight: 14,
-                                          ),
-                                          child: Text(
-                                            '$pendingCount',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                );
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.exit_to_app, color: Colors.red, size: 24),
-                              onPressed: () => _leaveGroup(group),
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                            ),
-                          ],
-                        ),
-                      );
+                                  ),
+                                  // Right-aligned Management Actions
+                                  buildManagementActions(),
+                                ],
+                              ),
+                              const Divider(),
+                            ],
+                          ),
+                        );
+                      } else {
+                        // NORMAL (WIDE) LAYOUT: Reverted to split layout
+                        return ListTile(
+                          title: Text(group.name),
+                          subtitle: Row(
+                            children: [
+                              Expanded(child: Text('ID: ${group.id}', overflow: TextOverflow.ellipsis)),
+                              buildMetaActions(),
+                            ],
+                          ),
+                          trailing: buildManagementActions(),
+                        );
+                      }
                     },
                   );
                 },

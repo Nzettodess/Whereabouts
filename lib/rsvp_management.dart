@@ -565,7 +565,7 @@ class _EventCardState extends State<EventCard> {
 
                         SizedBox(
                           width: double.infinity,
-                          child: OutlinedButton.icon(
+                          child: ElevatedButton.icon(
                             // Disabled if: no pending responses OR on cooldown
                             onPressed: (noResponse > 0 && !_onCooldown)
                                 ? () => _sendReminders(widget.event, stats['noResponseUserIds'])
@@ -584,11 +584,16 @@ class _EventCardState extends State<EventCard> {
                                       : 'All Responded ✓',
                               style: TextStyle(fontSize: isVeryNarrow ? 11 : 14),
                             ),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: _onCooldown 
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _onCooldown 
                                   ? Colors.orange 
-                                  : noResponse > 0 ? Colors.blue : Colors.green,
-                              padding: EdgeInsets.symmetric(vertical: isVeryNarrow ? 6 : 10),
+                                  : noResponse > 0 
+                                      ? Colors.blue 
+                                      : Colors.green,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey.shade600,
+                              disabledForegroundColor: Colors.white70,
+                              padding: EdgeInsets.symmetric(vertical: isVeryNarrow ? 10 : 14),
                             ),
                           ),
                         ),
@@ -636,33 +641,33 @@ class _EventCardState extends State<EventCard> {
   }
 
   Widget _buildRSVPToggleButton(String status, Color color, bool isSelected) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
       child: InkWell(
         onTap: isSelected ? null : () => _updateRSVP(status),
         borderRadius: BorderRadius.circular(8),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? color.withOpacity(0.2) : Colors.transparent,
-            border: Border.all(
-              color: isSelected ? color : Colors.grey[300]!,
-              width: 1.5,
-            ),
+            // Solid color when selected, grey when not
+            color: isSelected 
+                ? color 
+                : (isDark ? const Color(0xFF2C2C2E) : Colors.grey.shade200),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (isSelected) 
-                Icon(Icons.check, size: 14, color: color),
+                const Icon(Icons.check, size: 16, color: Colors.white),
               if (isSelected) const SizedBox(width: 4),
               Text(
                 status,
                 style: TextStyle(
-                  color: isSelected ? color : Colors.grey[600],
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  fontSize: 13,
+                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.grey.shade700),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
                 ),
               ),
             ],
@@ -699,31 +704,41 @@ class _EventCardState extends State<EventCard> {
     required int count,
     bool isNarrow = false,
   }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
       child: Container(
         padding: EdgeInsets.symmetric(
-          vertical: isNarrow ? 4 : 8,
-          horizontal: isNarrow ? 2 : 4,
+          vertical: isNarrow ? 6 : 10,
+          horizontal: isNarrow ? 4 : 6,
         ),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(isNarrow ? 6 : 8),
+          // More vibrant background
+          color: color.withOpacity(isDark ? 0.25 : 0.15),
+          borderRadius: BorderRadius.circular(isNarrow ? 8 : 10),
+          border: Border.all(
+            color: color.withOpacity(0.4),
+            width: 1,
+          ),
         ),
         child: Column(
           children: [
-            Icon(icon, color: color, size: isNarrow ? 16 : 20),
+            Icon(icon, color: color, size: isNarrow ? 18 : 22),
             SizedBox(height: isNarrow ? 2 : 4),
             Text(
               '$count',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: isNarrow ? 14 : 16,
-                color: color,
+                fontSize: isNarrow ? 16 : 20,
+                color: isDark ? Colors.white : color,
               ),
             ),
             Text(
               label,
-              style: TextStyle(fontSize: isNarrow ? 8 : 10, color: Colors.grey[700]),
+              style: TextStyle(
+                fontSize: isNarrow ? 9 : 11, 
+                color: isDark ? Colors.white70 : Colors.grey.shade700,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
