@@ -47,10 +47,24 @@ class _SyncfusionDatePickerDialogState extends State<SyncfusionDatePickerDialog>
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrow = screenWidth < 400;
+    final isVeryNarrow = screenWidth < 375;
+    
+    // Responsive width: 95% on very narrow, 90% on narrow, 420 max on larger
+    final dialogWidth = isVeryNarrow 
+        ? screenWidth * 0.95 
+        : (isNarrow ? screenWidth * 0.92 : 420.0);
+    final dialogPadding = isVeryNarrow ? 10.0 : (isNarrow ? 14.0 : 20.0);
+    
     return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isVeryNarrow ? 8 : (isNarrow ? 12 : 24),
+        vertical: 24,
+      ),
       child: Container(
-        width: 420,
-        padding: const EdgeInsets.all(20),
+        width: dialogWidth,
+        padding: EdgeInsets.all(dialogPadding),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -59,18 +73,29 @@ class _SyncfusionDatePickerDialogState extends State<SyncfusionDatePickerDialog>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    widget.helpText,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                  Expanded(
+                    child: Text(
+                      widget.helpText,
+                      style: TextStyle(
+                        fontSize: isVeryNarrow ? 16 : (isNarrow ? 18 : 20), 
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(
+                      minWidth: isVeryNarrow ? 32 : 48,
+                      minHeight: isVeryNarrow ? 32 : 48,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
               const Divider(),
-              const SizedBox(height: 12),
+              SizedBox(height: isVeryNarrow ? 6 : 12),
               
               // View mode buttons with clear labels - responsive
               Builder(builder: (context) {
@@ -107,11 +132,11 @@ class _SyncfusionDatePickerDialogState extends State<SyncfusionDatePickerDialog>
                   ),
                 );
               }),
-              const SizedBox(height: 12),
+              SizedBox(height: isVeryNarrow ? 6 : 12),
               
-              // Date picker - reduced height
+              // Date picker - reduced height on narrow screens
               Container(
-                height: 280,
+                height: isVeryNarrow ? 250 : 280,
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.grey.shade300),
                   borderRadius: BorderRadius.circular(8),
@@ -156,33 +181,36 @@ class _SyncfusionDatePickerDialogState extends State<SyncfusionDatePickerDialog>
                 todayHighlightColor: Colors.deepPurple,
               ),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: isVeryNarrow ? 6 : 10),
             
             // Helper text based on current view
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: EdgeInsets.symmetric(
+                horizontal: isVeryNarrow ? 8 : 12, 
+                vertical: isVeryNarrow ? 4 : 6,
+              ),
               decoration: BoxDecoration(
                 color: Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.lightbulb_outline, size: 16, color: Colors.blue.shade700),
-                  const SizedBox(width: 8),
+                  Icon(Icons.lightbulb_outline, size: isVeryNarrow ? 14 : 16, color: Colors.blue.shade700),
+                  SizedBox(width: isVeryNarrow ? 4 : 8),
                   Expanded(
                     child: Text(
-                      _getHelperText(),
-                      style: TextStyle(fontSize: 12, color: Colors.blue.shade900),
+                      isVeryNarrow ? _getShortHelperText() : _getHelperText(),
+                      style: TextStyle(fontSize: isVeryNarrow ? 10 : 12, color: Colors.blue.shade900),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: isVeryNarrow ? 6 : 10),
             
             // Selected date display
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(isVeryNarrow ? 8 : 12),
               decoration: BoxDecoration(
                 color: Colors.deepPurple.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
@@ -191,12 +219,12 @@ class _SyncfusionDatePickerDialogState extends State<SyncfusionDatePickerDialog>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.event, size: 20, color: Colors.deepPurple),
-                  const SizedBox(width: 8),
+                  Icon(Icons.event, size: isVeryNarrow ? 16 : 20, color: Colors.deepPurple),
+                  SizedBox(width: isVeryNarrow ? 4 : 8),
                   Text(
                     'Selected: ${DateFormat('dd/MM/yyyy').format(selectedDate)}',
-                    style: const TextStyle(
-                      fontSize: 16,
+                    style: TextStyle(
+                      fontSize: isVeryNarrow ? 13 : 16,
                       fontWeight: FontWeight.w600,
                       color: Colors.deepPurple,
                     ),
@@ -204,7 +232,7 @@ class _SyncfusionDatePickerDialogState extends State<SyncfusionDatePickerDialog>
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: isVeryNarrow ? 8 : 12),
             
             // Action buttons
             Row(
@@ -242,6 +270,19 @@ class _SyncfusionDatePickerDialogState extends State<SyncfusionDatePickerDialog>
         return 'Select a day. Use arrows to navigate months.';
       default:
         return 'Select a date from the calendar.';
+    }
+  }
+
+  String _getShortHelperText() {
+    switch (currentView) {
+      case DateRangePickerView.decade:
+        return 'Select a year. Swipe to scroll.';
+      case DateRangePickerView.year:
+        return 'Select a month.';
+      case DateRangePickerView.month:
+        return 'Select a day. Use arrows to navigate months.';
+      default:
+        return 'Select a date.';
     }
   }
 

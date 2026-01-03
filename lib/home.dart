@@ -1795,55 +1795,86 @@ class _HomeWithLoginState extends State<HomeWithLogin>
                   // Calendar Controls
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _currentMonthTitle,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Row(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+                        final effectiveWidth = constraints.maxWidth / textScale;
+                        final isCompact = effectiveWidth < 300;
+                        
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.chevron_left),
-                              onPressed: () {
-                                _calendarController.backward!();
-                              },
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                _calendarController.displayDate =
-                                    DateTime.now();
-                              },
-                              icon: const Icon(Icons.today, size: 16),
-                              label: const Text('Today'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    Colors.deepPurple, // Solid purple
-                                foregroundColor:
-                                    Colors.white, // White text/icon
-                                elevation: 2,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
+                            Flexible(
+                              child: Text(
+                                _currentMonthTitle,
+                                style: TextStyle(
+                                  fontSize: isCompact ? 16 : 20,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.chevron_right),
-                              onPressed: () {
-                                _calendarController.forward!();
-                              },
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.chevron_left),
+                                  padding: EdgeInsets.all(isCompact ? 4 : 8),
+                                  constraints: isCompact 
+                                      ? const BoxConstraints(minWidth: 32, minHeight: 32) 
+                                      : null,
+                                  onPressed: () {
+                                    _calendarController.backward!();
+                                  },
+                                ),
+                                // Show icon-only button when compact
+                                if (isCompact)
+                                  IconButton(
+                                    icon: const Icon(Icons.today, color: Colors.white),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.deepPurple,
+                                    ),
+                                    padding: const EdgeInsets.all(8),
+                                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                                    onPressed: () {
+                                      _calendarController.displayDate = DateTime.now();
+                                    },
+                                  )
+                                else
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      _calendarController.displayDate = DateTime.now();
+                                    },
+                                    icon: const Icon(Icons.today, size: 16),
+                                    label: const Text('Today'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.deepPurple,
+                                      foregroundColor: Colors.white,
+                                      elevation: 2,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 8,
+                                      ),
+                                    ),
+                                  ),
+                                IconButton(
+                                  icon: const Icon(Icons.chevron_right),
+                                  padding: EdgeInsets.all(isCompact ? 4 : 8),
+                                  constraints: isCompact 
+                                      ? const BoxConstraints(minWidth: 32, minHeight: 32) 
+                                      : null,
+                                  onPressed: () {
+                                    _calendarController.forward!();
+                                  },
+                                ),
+                              ],
                             ),
                           ],
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 10),

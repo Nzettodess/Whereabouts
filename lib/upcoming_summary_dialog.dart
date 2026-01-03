@@ -242,7 +242,7 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
                                 ),
                                 child: SizedBox(
                                   width: double.infinity,
-                                  child: OutlinedButton.icon(
+                                  child: ElevatedButton.icon(
                                     onPressed: () {
                                       setState(() {
                                         _daysToShow = _daysToShow + _daysIncrement;
@@ -256,9 +256,10 @@ class _UpcomingSummaryDialogState extends State<UpcomingSummaryDialog> {
                                         : 'Load more (showing $_daysToShow of $_maxDays days)',
                                       style: TextStyle(fontSize: isVeryNarrow ? 11 : 14),
                                     ),
-                                    style: OutlinedButton.styleFrom(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.deepPurple,
+                                      foregroundColor: Colors.white,
                                       padding: EdgeInsets.symmetric(vertical: isVeryNarrow ? 6 : 12),
-                                      side: BorderSide(color: Colors.deepPurple.shade300),
                                     ),
                                   ),
                                 ),

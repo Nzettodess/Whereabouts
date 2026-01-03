@@ -724,6 +724,10 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                             onPressed: _showJoinDialog,
                             icon: const Icon(Icons.group_add, size: 18),
                             label: const Text("Join Group"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -733,6 +737,10 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                             onPressed: _showCreateDialog,
                             icon: const Icon(Icons.add, size: 18),
                             label: const Text("Create Group"),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepPurple,
+                              foregroundColor: Colors.white,
+                            ),
                           ),
                         ),
                       ],
@@ -745,6 +753,10 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                             onPressed: _showJoinDialog,
                             icon: Icon(Icons.group_add, size: isNarrow ? 16 : 20),
                             label: Text("Join", style: TextStyle(fontSize: isNarrow ? 12 : 14)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -753,6 +765,10 @@ class _GroupManagementDialogState extends State<GroupManagementDialog> {
                             onPressed: _showCreateDialog,
                             icon: Icon(Icons.add, size: isNarrow ? 16 : 20),
                             label: Text("Create", style: TextStyle(fontSize: isNarrow ? 12 : 14)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.deepPurple,
+                              foregroundColor: Colors.white,
+                            ),
                           ),
                         ),
                       ],

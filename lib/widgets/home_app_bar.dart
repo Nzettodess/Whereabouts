@@ -53,11 +53,19 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
     if (user == null) return const SizedBox.shrink();
 
     final screenWidth = MediaQuery.of(context).size.width;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    // Calculate effective width - at larger text scales, we need more space
+    final effectiveWidth = screenWidth / textScale;
+    
+    // Check both effective width (for text scaling) AND raw screen width (for small screens)
+    // This ensures good layout on both small screens and scaled text
+    final showLogo = effectiveWidth >= 230 && screenWidth >= 300;
+    final showOrbitText = effectiveWidth >= 280 && screenWidth >= 400;
     
     return AppBar(
       backgroundColor: Colors.transparent, // Glassmorphism base
       elevation: 0,
-      titleSpacing: screenWidth < 400 ? 0 : NavigationToolbar.kMiddleSpacing,
+      titleSpacing: (effectiveWidth < 350 || screenWidth < 400) ? 0 : NavigationToolbar.kMiddleSpacing,
       flexibleSpace: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
@@ -78,9 +86,11 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (screenWidth >= 335)
+            // Hide logo only when effective width is very small OR screen is tiny
+            if (showLogo)
               SvgPicture.asset("assets/orbit_logo.svg", height: 40),
-            if (screenWidth >= 375) ...[
+            // Hide "Orbit" text when effective width is small OR screen is narrow
+            if (showOrbitText) ...[
               const SizedBox(width: 8),
               Text(
                 "Orbit",

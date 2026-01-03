@@ -238,8 +238,10 @@ class _NotificationCenterState extends State<NotificationCenter> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    final isNarrow = MediaQuery.of(context).size.width < 400;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final effectiveWidth = screenWidth / textScale;
+    final isNarrow = effectiveWidth < 400;
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -256,48 +258,64 @@ class _NotificationCenterState extends State<NotificationCenter> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+              padding: EdgeInsets.fromLTRB(isNarrow ? 12 : 20, 16, isNarrow ? 8 : 16, 16),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    "Notifications", 
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  Row(
-                    children: [
-                      // Mark all as read button
-                      if (widget.canWrite)
-                      // Mark all as read button (Icon Only)
-                      if (widget.canWrite)
-                        IconButton(
-                          onPressed: _markAllAsRead,
-                          icon: const Icon(Icons.done_all),
-                          tooltip: 'Mark All Read',
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      if (!isNarrow) const SizedBox(width: 8),
-                      // Mark All Unread Button (New)
-                      if (widget.canWrite)
-                        IconButton(
-                          onPressed: _markAllAsUnread,
-                          icon: const Icon(Icons.undo), 
-                          tooltip: 'Mark All Unread',
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      // Delete All Button (Trash Sweep)
-                      if (widget.canWrite)
-                        IconButton(
-                           icon: const Icon(Icons.delete_sweep),
-                           tooltip: 'Delete All',
-                           onPressed: _confirmDeleteAll,
-                           color: Colors.red,
-                        ),
-                      IconButton(
-                        icon: const Icon(Icons.close), 
-                        onPressed: () => Navigator.pop(context),
+                  Expanded(
+                    child: Text(
+                      "Notifications", 
+                      style: TextStyle(
+                        fontSize: isNarrow ? 18 : 20, 
+                        fontWeight: FontWeight.bold,
                       ),
-                    ],
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // Action buttons - compact on narrow screens
+                  if (widget.canWrite)
+                    IconButton(
+                      onPressed: _markAllAsRead,
+                      icon: const Icon(Icons.done_all),
+                      tooltip: 'Mark All Read',
+                      color: Theme.of(context).colorScheme.primary,
+                      iconSize: isNarrow ? 20 : 24,
+                      padding: EdgeInsets.all(isNarrow ? 4 : 8),
+                      constraints: isNarrow 
+                          ? const BoxConstraints(minWidth: 32, minHeight: 32)
+                          : null,
+                    ),
+                  if (widget.canWrite)
+                    IconButton(
+                      onPressed: _markAllAsUnread,
+                      icon: const Icon(Icons.undo), 
+                      tooltip: 'Mark All Unread',
+                      color: Theme.of(context).colorScheme.primary,
+                      iconSize: isNarrow ? 20 : 24,
+                      padding: EdgeInsets.all(isNarrow ? 4 : 8),
+                      constraints: isNarrow 
+                          ? const BoxConstraints(minWidth: 32, minHeight: 32)
+                          : null,
+                    ),
+                  if (widget.canWrite)
+                    IconButton(
+                       icon: const Icon(Icons.delete_sweep),
+                       tooltip: 'Delete All',
+                       onPressed: _confirmDeleteAll,
+                       color: Colors.red,
+                       iconSize: isNarrow ? 20 : 24,
+                       padding: EdgeInsets.all(isNarrow ? 4 : 8),
+                       constraints: isNarrow 
+                           ? const BoxConstraints(minWidth: 32, minHeight: 32)
+                           : null,
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.close), 
+                    onPressed: () => Navigator.pop(context),
+                    iconSize: isNarrow ? 20 : 24,
+                    padding: EdgeInsets.all(isNarrow ? 4 : 8),
+                    constraints: isNarrow 
+                        ? const BoxConstraints(minWidth: 32, minHeight: 32)
+                        : null,
                   ),
                 ],
               ),

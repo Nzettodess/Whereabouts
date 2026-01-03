@@ -22,12 +22,18 @@ class BirthdayBabyDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final birthdays = _getBirthdaysForMonth(now);
+    
+    // Check for narrow/scaled screens
+    final screenWidth = MediaQuery.of(context).size.width;
+    final textScale = MediaQuery.of(context).textScaler.scale(1.0);
+    final effectiveWidth = screenWidth / textScale;
+    final isCompact = effectiveWidth < 350 || screenWidth < 400;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 400, maxHeight: 500),
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isCompact ? 12 : 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -38,8 +44,12 @@ class BirthdayBabyDialog extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    "Birthday Babies - ${DateFormat('MMMM').format(now)}",
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    "Birthdays - ${DateFormat('MMMM').format(now)}",
+                    style: TextStyle(
+                      fontSize: isCompact ? 18 : 20, 
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 2,
                   ),
                 ),
                 IconButton(
